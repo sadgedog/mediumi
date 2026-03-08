@@ -28,5 +28,6 @@ $ make test-codec
 - mediumi-mpeg2ts
     - MPEG2-TS encoder/decoder
 - mediumi-codecs
-    - H.264
+    - H.264(AVC)
+    - AAC(ADTS)
 - ...

@@ -24,6 +24,35 @@ pub struct Processor {
 }
 
 impl Processor {
+    /// Write codec data
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        for nal in &self.nal_units {
+            match nal {
+                NalData::Sps(sc, nri, sps) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::SPS));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &sps.to_bytes(),
+                    ));
+                }
+                NalData::Pps(sc, nri, pps) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::PPS));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &pps.to_bytes(),
+                    ));
+                }
+                NalData::Raw(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+            }
+        }
+        buf
+    }
+
     /// parse codec for 1 PES
     pub fn parse(pes_payload: &[u8]) -> Result<Self, Error> {
         let annex_b_list = parse_all(pes_payload)?;
@@ -61,34 +90,5 @@ impl Processor {
         }
 
         Ok(Self { nal_units })
-    }
-
-    /// Write codec data
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        for nal in &self.nal_units {
-            match nal {
-                NalData::Sps(sc, nri, sps) => {
-                    buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::SPS));
-                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
-                        &sps.to_bytes(),
-                    ));
-                }
-                NalData::Pps(sc, nri, pps) => {
-                    buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::PPS));
-                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
-                        &pps.to_bytes(),
-                    ));
-                }
-                NalData::Raw(sc, nri, nal_type, rbsp) => {
-                    buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(nal_type));
-                    buf.extend_from_slice(rbsp);
-                }
-            }
-        }
-        buf
     }
 }
