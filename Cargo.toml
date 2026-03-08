@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "mediumi",
+    "mediumi-mpeg2ts",
+]
+resolver = "2"
+
+[workspace.dependencies]
