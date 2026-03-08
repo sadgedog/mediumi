@@ -4,6 +4,9 @@ build-all:
 build-mpeg2ts:
 	cargo build -p mediumi-mpeg2ts
 
+build-codec:
+	cargo build -p mediumi-codec
+
 fmt:
 	cargo fmt --all -- --check  
 
@@ -15,3 +18,6 @@ test-all:
 
 test-mpeg2ts:
 	cargo test -p mediumi-mpeg2ts
+
+test-codec:
+	cargo test -p mediumi-codec

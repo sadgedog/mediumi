@@ -8,6 +8,7 @@ $ make build-all
 - Build specific crates
 ```
 $ make build-mpeg2ts
+$ make build-codec
 ...
 ```
 
@@ -19,10 +20,13 @@ $ make test-all
 - Test specific crates
 ```
 $ make test-mpeg2ts
+$ make test-codec
 ...
 ```
 
 ## Crates
 - mediumi-mpeg2ts
     - MPEG2-TS encoder/decoder
+- mediumi-codecs
+    - H.264
 - ...

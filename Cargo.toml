@@ -2,6 +2,7 @@
 members = [
     "mediumi",
     "mediumi-mpeg2ts",
+    "mediumi-codec",
 ]
 resolver = "2"
 
