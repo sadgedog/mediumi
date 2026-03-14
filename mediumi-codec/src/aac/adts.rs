@@ -1,3 +1,33 @@
+//! ADTS (Audio Data Transport Stream) parser
+//!
+//! ADTS Frame construction
+//! ┌───────────────────────────────────────────────┐
+//! │  ADTS Header (7 bytes, or 9 bytes with CRC)   │
+//! ├───────────────────────────────────────────────┤
+//! │  Raw AAC Frame (variable)                     │
+//! └───────────────────────────────────────────────┘
+//!
+//! ADTS Header construction
+//! ┌───────────────────────────────────────────────┐
+//! │  syncword (12 bits)                           │ <- Fixed at 0xFFF
+//! │  ID (1 bit)                                   │ <- 0: MPEG-4, 1: MPEG-2
+//! │  layer (2 bits)                               │ <- Fixed at 0b00
+//! │  protection_absent (1 bit)                    │ <- 0: CRC present, 1: no CRC
+//! │  profile (2 bits)                             │ <- 0: Main, 1: LC, 2: SSR, 3: Reserved
+//! │  sampling_frequency_index (4 bits)            │ <- e.g. 3: 48000Hz, 4: 44100Hz
+//! │  private_bit (1 bit)                          │
+//! │  channel_configuration (3 bits)               │ <- e.g. 1: mono, 2: stereo
+//! │  original_copy (1 bit)                        │
+//! │  home (1 bit)                                 │
+//! │  copyright_identification_bit (1 bit)         │
+//! │  copyright_identification_start (1 bit)       │
+//! │  aac_frame_length (13 bits)                   │ <- Length of the entire frame including header
+//! │  adts_buffer_fullness (11 bits)               │ <- 0x7FF: VBR
+//! │  number_of_raw_data_blocks_in_frame (2 bits)  │
+//! ├───────────────────────────────────────────────┤
+//! │  CRC (16 bits, optional)                      │ <- Present if protection_absent == 0
+//! └───────────────────────────────────────────────┘
+
 use crate::aac::error::Error;
 
 #[derive(Debug)]

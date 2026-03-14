@@ -1,4 +1,5 @@
 pub mod aac;
+pub mod ac3;
 pub mod api;
 pub mod h264;
 pub mod util;
