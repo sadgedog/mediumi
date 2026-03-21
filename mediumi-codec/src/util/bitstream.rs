@@ -106,6 +106,15 @@ impl<'a> BitstreamReader<'a> {
         (remaining, bit_offset)
     }
 
+    pub fn skip_bits(&mut self, n: usize) -> usize {
+        let remaining = self.remaining_bits();
+        let actual = n.min(remaining);
+        let new_pos = self.byte_offset * 8 + self.bit_offset as usize + actual;
+        self.byte_offset = new_pos / 8;
+        self.bit_offset = (new_pos % 8) as u8;
+        actual
+    }
+
     pub fn remaining_bits(&self) -> usize {
         (self.data.len() - self.byte_offset) * 8 - self.bit_offset as usize
     }

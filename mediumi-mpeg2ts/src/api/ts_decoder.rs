@@ -1,9 +1,6 @@
 //! Parse raw TS byte stream into individual TS packet structs.
 
-use crate::ts;
-use crate::ts::packet::Packet;
-
-use crate::api::error::Error;
+use crate::{api::error::Error, ts, ts::packet::Packet};
 
 #[derive(Debug)]
 pub struct Decoded {
