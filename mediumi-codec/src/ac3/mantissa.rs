@@ -5,7 +5,6 @@ use crate::ac3::frame::QuantizedMantissaValues;
 use crate::util::bitstream::BitstreamReader;
 
 // qntztab[bap]: mantissa bits per bap value (Table 7.18)
-#[allow(dead_code)]
 const QNTZTAB: [f32; 16] = [
     0.0, 1.67, 2.33, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0,
 ];

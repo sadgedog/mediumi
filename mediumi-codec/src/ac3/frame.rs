@@ -1145,13 +1145,17 @@ impl Ac3 {
         // Inclusion of unused dummy data
         let unused_dummy = if reader.read_bit()? {
             let skipl = reader.read_bits(9)? as u16;
-            // Skip the dummy data; truncate at frame boundary if needed
-            let skip_bits = skipl as usize * 8;
-            reader.skip_bits(skip_bits);
-            Some(UnusedDummyData {
-                skipl,
-                skipfld: vec![],
-            })
+            let skip_bytes = skipl as usize;
+            let mut skipfld = Vec::with_capacity(skip_bytes);
+            for _ in 0..skip_bytes {
+                if reader.remaining_bits() >= 8 {
+                    skipfld.push(reader.read_bits(8)? as u8);
+                } else {
+                    reader.skip_bits(reader.remaining_bits());
+                    break;
+                }
+            }
+            Some(UnusedDummyData { skipl, skipfld })
         } else {
             None
         };
