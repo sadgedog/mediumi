@@ -129,6 +129,21 @@ impl AudioMode {
     }
 }
 
+/// Extended BSI fields after origbs, varying by bsid.
+#[derive(Debug)]
+pub enum BsiExtension {
+    /// bsid=6: Alternate BSI syntax (A/52 Annex D, Table D2.1)
+    AltBsi {
+        xbsi1: Option<Xbsi1>,
+        xbsi2: Option<Xbsi2>,
+    },
+    /// bsid != 6: Standard BSI syntax (A/52 Table 5.2)
+    Standard {
+        timecod1: Option<u16>, // 14 bits
+        timecod2: Option<u16>, // 14 bits
+    },
+}
+
 #[derive(Debug)]
 pub struct Xbsi1 {
     pub dmixmod: u8,
@@ -166,8 +181,7 @@ pub struct BitStreamInformation {
     pub audprodi: Option<(u8, u8)>, // (mixlevel, roomtyp)
     pub copyrightb: bool,
     pub origbs: bool,
-    pub xbsi1: Option<Xbsi1>,
-    pub xbsi2: Option<Xbsi2>,
+    pub ext: BsiExtension,
     pub addbsi: Option<Addbsi>,
 }
 
@@ -591,30 +605,49 @@ impl Ac3 {
 
         let copyrightb = reader.read_bit()?;
         let origbs = reader.read_bit()?;
-        let xbsi1e = reader.read_bit()?;
-        let xbsi1 = if xbsi1e {
-            Some(Xbsi1 {
-                dmixmod: reader.read_bits(2)? as u8,
-                ltrtcmixlev: reader.read_bits(3)? as u8,
-                ltrtsurmixlev: reader.read_bits(3)? as u8,
-                lorocmixlev: reader.read_bits(3)? as u8,
-                lorosurmixlev: reader.read_bits(3)? as u8,
-            })
-        } else {
-            None
-        };
 
-        let xbsi2e = reader.read_bit()?;
-        let xbsi2 = if xbsi2e {
-            Some(Xbsi2 {
-                dsurexmod: reader.read_bits(2)? as u8,
-                dheadphonmod: reader.read_bits(2)? as u8,
-                adconvtyp: reader.read_bit()?,
-                xbsi2: reader.read_bits(8)? as u8,
-                encinfo: reader.read_bit()?,
-            })
+        let ext = if bsid == 6 {
+            // Alternate BSI syntax
+            let xbsi1e = reader.read_bit()?;
+            let xbsi1 = if xbsi1e {
+                Some(Xbsi1 {
+                    dmixmod: reader.read_bits(2)? as u8,
+                    ltrtcmixlev: reader.read_bits(3)? as u8,
+                    ltrtsurmixlev: reader.read_bits(3)? as u8,
+                    lorocmixlev: reader.read_bits(3)? as u8,
+                    lorosurmixlev: reader.read_bits(3)? as u8,
+                })
+            } else {
+                None
+            };
+            let xbsi2e = reader.read_bit()?;
+            let xbsi2 = if xbsi2e {
+                Some(Xbsi2 {
+                    dsurexmod: reader.read_bits(2)? as u8,
+                    dheadphonmod: reader.read_bits(2)? as u8,
+                    adconvtyp: reader.read_bit()?,
+                    xbsi2: reader.read_bits(8)? as u8,
+                    encinfo: reader.read_bit()?,
+                })
+            } else {
+                None
+            };
+            BsiExtension::AltBsi { xbsi1, xbsi2 }
         } else {
-            None
+            // Standard BSI syntax
+            let timecod1e = reader.read_bit()?;
+            let timecod1 = if timecod1e {
+                Some(reader.read_bits(14)? as u16)
+            } else {
+                None
+            };
+            let timecod2e = reader.read_bit()?;
+            let timecod2 = if timecod2e {
+                Some(reader.read_bits(14)? as u16)
+            } else {
+                None
+            };
+            BsiExtension::Standard { timecod1, timecod2 }
         };
 
         let addbsie = reader.read_bit()?;
@@ -645,8 +678,7 @@ impl Ac3 {
             audprodi,
             copyrightb,
             origbs,
-            xbsi1,
-            xbsi2,
+            ext,
             addbsi,
         })
     }
