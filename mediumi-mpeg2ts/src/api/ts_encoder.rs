@@ -2,8 +2,7 @@
 //!
 //! Note: This encoder preserve the original TS packet interleaving
 
-use crate::api::error::Error;
-use crate::api::ts_decoder::Decoded;
+use crate::api::{error::Error, ts_decoder::Decoded};
 
 pub fn encode(decoded: &Decoded) -> Result<Vec<u8>, Error> {
     let mut output = Vec::with_capacity(decoded.packets.len() * 188);

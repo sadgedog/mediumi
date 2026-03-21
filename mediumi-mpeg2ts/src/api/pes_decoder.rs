@@ -2,8 +2,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use crate::api::error::Error;
-use crate::{pes, psi::pat::Pat, psi::pmt::Pmt, ts};
+use crate::{api::error::Error, pes, psi::pat::Pat, psi::pmt::Pmt, ts};
 
 #[derive(Debug)]
 pub struct TsFragment {

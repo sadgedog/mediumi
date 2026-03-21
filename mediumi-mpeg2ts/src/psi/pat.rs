@@ -34,8 +34,7 @@
 //! └─────────────────────────────────────┘
 //!
 
-use crate::psi::crc32;
-use crate::psi::error::Error;
+use crate::psi::{crc32, error::Error};
 
 #[derive(Debug)]
 pub struct PatProgram {

@@ -7,8 +7,10 @@
 //! ordering compared to the original stream where audio/video packets are interleaved.
 //! PAT/PMT are also deduplicated to a single instance.
 
-use crate::api::error::Error;
-use crate::api::pes_decoder::{Decoded, Stream};
+use crate::api::{
+    error::Error,
+    pes_decoder::{Decoded, Stream},
+};
 
 /// Encode Decoded data back to TS byte stream
 pub fn encode(decoded: &Decoded) -> Result<Vec<u8>, Error> {

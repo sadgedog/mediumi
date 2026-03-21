@@ -7,8 +7,7 @@
 //! │  NAL Unit (variable)                      │
 //! └───────────────────────────────────────────┘
 
-use crate::h264::error::Error;
-use crate::h264::nal::NalUnit;
+use crate::h264::{error::Error, nal::NalUnit};
 
 const START_CODE_3B: &[u8; 3] = &[0x00, 0x00, 0x01];
 const START_CODE_4B: &[u8; 4] = &[0x00, 0x00, 0x00, 0x01];
