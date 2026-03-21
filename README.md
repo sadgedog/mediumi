@@ -30,4 +30,5 @@ $ make test-codec
 - mediumi-codecs
     - H.264(AVC)
     - AAC(ADTS)
+    - AC-3
 - ...
