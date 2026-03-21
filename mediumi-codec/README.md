@@ -26,14 +26,18 @@ $ ffmpeg -f lavfi -i sine=frequency=440:duration=3:sample_rate=44100 \
 ```
 $ cargo run --example h264_parse
 $ cargo run --example adts_parse
+$ cargo run --example ac3_parse
 ```
 
 ### Roundtrip
 ```
 $ cargo run --example h264_roundtrip
 $ cargo run --example adts_roundtrip
+$ cargo run --example ac3_roundtrip
 ```
 
 ## Out of scope
-- Specific NAL Unit Type (AUD, SEI, ...)
-    - These may be supported in the future.
+- H264
+    - Specific NAL Unit Type (AUD, SEI, ...)
+    - VUI parsing
+        - These may be supported in the future.
