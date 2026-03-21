@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 mediumi-mpeg2ts = { path = "../mediumi-mpeg2ts" }
-mediumi-codec = { path = "../mediumi-codec" }
+mediumi-h264 = { path = "../mediumi-h264" }
+mediumi-aac = { path = "../mediumi-aac" }
+mediumi-ac3 = { path = "../mediumi-ac3" }

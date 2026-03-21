@@ -1,8 +1,10 @@
 [workspace]
 members = [
     "mediumi",
+    "mediumi-aac",
+    "mediumi-ac3",
+    "mediumi-h264",
     "mediumi-mpeg2ts",
-    "mediumi-codec",
 ]
 resolver = "2"
 
