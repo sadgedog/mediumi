@@ -1,24 +1,24 @@
 //! Bit Allocation Algorithm
 
-// slowdec[sdcycod] (Table 7.6)
+// slowdec[sdcycod]
 const SLOWDEC: [u16; 4] = [0x0F, 0x11, 0x13, 0x15];
 
-// fastdec[fdcycod] (Table 7.7)
+// fastdec[fdcycod]
 const FASTDEC: [u16; 4] = [0x3F, 0x53, 0x67, 0x7B];
 
-// slowgain[sgaincod] (Table 7.8)
+// slowgain[sgaincod]
 const SLOWGAIN: [u16; 4] = [0x540, 0x4D8, 0x478, 0x410];
 
-// dbpbtab[dbpbcod] (Table 7.9)
+// dbpbtab[dbpbcod]
 const DBPBTAB: [u16; 4] = [0x000, 0x0700, 0x0900, 0x0B00];
 
-// floortab[floorcod] (Table 7.10)
+// floortab[floorcod]
 const FLOORTAB: [i16; 8] = [0x2F0, 0x2B0, 0x270, 0x230, 0x1F0, 0x170, 0x0F0, -0x0800];
 
-// fastgain[fgaincod] (Table 7.11)
+// fastgain[fgaincod]
 const FASTGAIN: [u16; 8] = [0x080, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380, 0x400];
 
-// Hearing threshold table hth[fscod][band] (Table 7.15)
+// Hearing threshold table hth[fscod][band]
 const HTH: [[i16; 50]; 3] = [
     // 48kHz (fscod=0)
     [
@@ -46,27 +46,27 @@ const HTH: [[i16; 50]; 3] = [
     ],
 ];
 
-// bndtab[band]: first mantissa number in each band (Table 7.12)
+// bndtab[band]: first mantissa number in each band
 const BNDTAB: [usize; 50] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     26, 27, 28, 31, 34, 37, 40, 43, 46, 49, 55, 61, 67, 73, 79, 85, 97, 109, 121, 133, 157, 181,
     205, 229,
 ];
 
-// bndsz[band]: width of each band in number of mantissas (Table 7.12)
+// bndsz[band]: width of each band in number of mantissas
 const BNDSZ: [usize; 50] = [
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3,
     3, 3, 3, 6, 6, 6, 6, 6, 6, 12, 12, 12, 12, 24, 24, 24, 24, 24,
 ];
 
-// baptab[] (Table 7.16)
+// baptab[]
 const BAPTAB: [u8; 64] = [
     0, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9,
     10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14,
     15, 15, 15, 15, 15, 15, 15, 15, 15,
 ];
 
-// masktab[bin]: bin → band mapping (Table 7.13)
+// masktab[bin]: bin → band mapping
 const MASKTAB: [u8; 256] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     26, 27, 28, 28, 28, 29, 29, 29, 30, 30, 30, 31, 31, 31, 32, 32, 32, 33, 33, 33, 34, 34, 34, 35,
@@ -81,7 +81,7 @@ const MASKTAB: [u8; 256] = [
     49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 0, 0, 0,
 ];
 
-// latab[] (Table 7.18: Log Addition Table)
+// latab[] (Log Addition Table)
 // address = min(abs(c) >> 1, 255)
 const LATAB: [u8; 256] = [
     0x40, 0x3F, 0x3E, 0x3D, 0x3C, 0x3B, 0x3A, 0x39, 0x38, 0x37, 0x36, 0x35, 0x34, 0x34, 0x33, 0x32,
