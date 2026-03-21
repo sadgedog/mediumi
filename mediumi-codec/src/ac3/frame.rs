@@ -4,7 +4,7 @@ use crate::{
         error::Error,
         mantissa::{MantissaParams, parse_mantissas},
     },
-    util::bitstream::BitstreamReader,
+    util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 
 const AC3_SYNCWORD: u16 = 0x0B77;
@@ -434,7 +434,141 @@ pub struct Ac3 {
 
 impl Ac3 {
     pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
+        let mut writer = BitstreamWriter::new();
+
+        // syncinfo
+        let si = &self.si;
+        writer.write_bits(si.syncword as u32, 16);
+        writer.write_bits(si.crc1 as u32, 16);
+        writer.write_bits(si.fscod as u32, 2);
+        writer.write_bits(si.frmsizecod as u32, 6);
+
+        // bit stream information
+        let bsi = &self.bsi;
+        writer.write_bits(bsi.bsid as u32, 5);
+        writer.write_bits(bsi.bsmod as u32, 3);
+        writer.write_bits(bsi.acmod as u32, 3);
+
+        if (bsi.acmod & 0x1) != 0 && bsi.acmod != 0x1 {
+            match &bsi.audio_mode {
+                AudioMode::ThreeFront { cmixlev, .. }
+                | AudioMode::LcrSurround { cmixlev, .. }
+                | AudioMode::FiveChannel { cmixlev, .. } => {
+                    writer.write_bits(*cmixlev as u32, 2);
+                }
+                _ => {}
+            }
+        }
+        if (bsi.acmod & 0x4) != 0 {
+            match &bsi.audio_mode {
+                AudioMode::StereoSurround { surmixlev, .. }
+                | AudioMode::LcrSurround { surmixlev, .. }
+                | AudioMode::Quad { surmixlev, .. }
+                | AudioMode::FiveChannel { surmixlev, .. } => {
+                    writer.write_bits(*surmixlev as u32, 2);
+                }
+                _ => {}
+            }
+        }
+        if let AudioMode::Stereo { dsurmod } = &bsi.audio_mode {
+            writer.write_bits(*dsurmod as u32, 2);
+        }
+
+        writer.write_bool(bsi.lfeon);
+        writer.write_bits(bsi.dialnorm as u32, 5);
+        writer.write_bool(bsi.compr.is_some());
+        if let Some(compr) = bsi.compr {
+            writer.write_bits(compr as u32, 8);
+        }
+        writer.write_bool(bsi.langcod.is_some());
+        if let Some(langcod) = bsi.langcod {
+            writer.write_bits(langcod as u32, 8);
+        }
+        writer.write_bool(bsi.audprodi.is_some());
+        if let Some((mixlevel, roomtyp)) = bsi.audprodi {
+            writer.write_bits(mixlevel as u32, 5);
+            writer.write_bits(roomtyp as u32, 2);
+        }
+
+        if let AudioMode::DualMono {
+            dialnorm2,
+            compr2,
+            langcod2,
+            audprodi2,
+        } = &bsi.audio_mode
+        {
+            writer.write_bits(*dialnorm2 as u32, 5);
+            writer.write_bool(compr2.is_some());
+            if let Some(c) = compr2 {
+                writer.write_bits(*c as u32, 8);
+            }
+            writer.write_bool(langcod2.is_some());
+            if let Some(l) = langcod2 {
+                writer.write_bits(*l as u32, 8);
+            }
+            writer.write_bool(audprodi2.is_some());
+            if let Some((m, r)) = audprodi2 {
+                writer.write_bits(*m as u32, 5);
+                writer.write_bits(*r as u32, 2);
+            }
+        }
+
+        writer.write_bool(bsi.copyrightb);
+        writer.write_bool(bsi.origbs);
+        match &bsi.ext {
+            BsiExtension::AltBsi { xbsi1, xbsi2 } => {
+                writer.write_bool(xbsi1.is_some());
+                if let Some(x) = xbsi1 {
+                    writer.write_bits(x.dmixmod as u32, 2);
+                    writer.write_bits(x.ltrtcmixlev as u32, 3);
+                    writer.write_bits(x.ltrtsurmixlev as u32, 3);
+                    writer.write_bits(x.lorocmixlev as u32, 3);
+                    writer.write_bits(x.lorosurmixlev as u32, 3);
+                }
+                writer.write_bool(xbsi2.is_some());
+                if let Some(x) = xbsi2 {
+                    writer.write_bits(x.dsurexmod as u32, 2);
+                    writer.write_bits(x.dheadphonmod as u32, 2);
+                    writer.write_bool(x.adconvtyp);
+                    writer.write_bits(x.xbsi2 as u32, 8);
+                    writer.write_bool(x.encinfo);
+                }
+            }
+            BsiExtension::Standard { timecod1, timecod2 } => {
+                writer.write_bool(timecod1.is_some());
+                if let Some(t) = timecod1 {
+                    writer.write_bits(*t as u32, 14);
+                }
+                writer.write_bool(timecod2.is_some());
+                if let Some(t) = timecod2 {
+                    writer.write_bits(*t as u32, 14);
+                }
+            }
+        }
+        writer.write_bool(bsi.addbsi.is_some());
+        if let Some(addbsi) = &bsi.addbsi {
+            writer.write_bits(addbsi.addbsil as u32, 6);
+            for &b in &addbsi.addbsi {
+                writer.write_bits(b as u32, 8);
+            }
+        }
+
+        // audio block
+        let abs = &self.ab;
+        for _ab in abs {
+            todo!()
+        }
+
+        // auxdata
+        for &b in &self.aux.auxdata {
+            writer.write_bits(b as u32, 8);
+        }
+
+        // errorcheck
+        writer.write_bool(self.ec.crcrsv);
+        writer.write_bits(self.ec.crc2 as u32, 16);
+
+        writer.finish()
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
