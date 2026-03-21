@@ -14,11 +14,11 @@ It provides the following features.
 
 ## Crates
 - mediumi-aac
-    - AAC (ADTS) bitstream serializer and deserialzier
+    - AAC (ADTS) bitstream parser and serializer
 - mediumi-ac3
-    - AC-3 (A/52) bitstream serializer and deserialzier
+    - AC-3 (A/52) bitstream parser and serializer
 - mediumi-h264
-    - H.264 (AVC) bitstream serializer and deserialzier
+    - H.264 (AVC) bitstream parser and serializer
 - mediumi-mpeg2ts
     - MPEG2-TS container encoder and decoder
 
