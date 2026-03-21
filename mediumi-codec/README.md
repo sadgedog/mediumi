@@ -3,6 +3,7 @@
 ## Support
 - H.264(AVC)
 - AAC(ADTS)
+- AC-3
 
 ## Build
 ```
@@ -11,7 +12,7 @@ $ cargo build -p mediumi-codec
 
 ## Run example
 ### Generate test h264 adts file (using ffmpeg)
-Need to generate h264 & adts raw data to make a sample input.
+Need to generate h264, adts raw & ac3 raw data to make a sample input.
 ```
 $ mkdir examples/data && cd examples/data
 $ ffmpeg -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 \
