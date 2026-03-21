@@ -2,7 +2,11 @@ use crate::util;
 
 #[derive(Debug)]
 pub enum Error {
+    DataTooShort,
+    InvalidSyncword(u16),
+    InvalidFrameSize,
     InvalidAcmod(u8),
+    InvalidState(&'static str),
     Bitstream(util::error::Error),
 }
 

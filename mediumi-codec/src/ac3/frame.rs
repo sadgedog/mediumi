@@ -1,4 +1,57 @@
-use crate::{ac3::error::Error, util::bitstream::BitstreamReader};
+use crate::{
+    ac3::{
+        bap::{BapParams, compute_bap},
+        error::Error,
+        mantissa::{MantissaParams, parse_mantissas},
+    },
+    util::bitstream::BitstreamReader,
+};
+
+const AC3_SYNCWORD: u16 = 0x0B77;
+
+// Frame size table
+// Indexed by [frmsizecod][fscod], value is frame size in 16-bit words.
+// fscod: 0=48kHz, 1=44.1kHz, 2=32kHz
+const FRMSIZECOD_TABLE: [[u16; 3]; 38] = [
+    [64, 69, 96],
+    [64, 70, 96],
+    [80, 87, 120],
+    [80, 88, 120],
+    [96, 104, 144],
+    [96, 105, 144],
+    [112, 121, 168],
+    [112, 122, 168],
+    [128, 139, 192],
+    [128, 140, 192],
+    [160, 174, 240],
+    [160, 175, 240],
+    [192, 208, 288],
+    [192, 209, 288],
+    [224, 243, 336],
+    [224, 244, 336],
+    [256, 278, 384],
+    [256, 279, 384],
+    [320, 348, 480],
+    [320, 349, 480],
+    [384, 417, 576],
+    [384, 418, 576],
+    [448, 487, 672],
+    [448, 488, 672],
+    [512, 557, 768],
+    [512, 558, 768],
+    [640, 696, 960],
+    [640, 697, 960],
+    [768, 835, 1152],
+    [768, 836, 1152],
+    [896, 975, 1344],
+    [896, 976, 1344],
+    [1024, 1114, 1536],
+    [1024, 1115, 1536],
+    [1152, 1253, 1728],
+    [1152, 1254, 1728],
+    [1280, 1393, 1920],
+    [1280, 1394, 1920],
+];
 
 #[derive(Debug)]
 pub struct SyncInfo {
@@ -6,6 +59,34 @@ pub struct SyncInfo {
     pub crc1: u16,
     pub fscod: u8,
     pub frmsizecod: u8,
+}
+
+impl SyncInfo {
+    /// Returns the frame size in bytes.
+    pub fn frame_size(&self) -> Option<usize> {
+        if self.fscod >= 3 || self.frmsizecod >= 38 {
+            return None;
+        }
+        Some(FRMSIZECOD_TABLE[self.frmsizecod as usize][self.fscod as usize] as usize * 2)
+    }
+}
+
+/// Peek at the syncinfo of an AC-3 frame and return the frame size in bytes.
+/// Requires at least 5 bytes (syncword 2 + crc1 2 + fscod/frmsizecod 1).
+pub fn peek_frame_size(data: &[u8]) -> Option<usize> {
+    if data.len() < 5 {
+        return None;
+    }
+    let syncword = (data[0] as u16) << 8 | data[1] as u16;
+    if syncword != AC3_SYNCWORD {
+        return None;
+    }
+    let fscod = data[4] >> 6;
+    let frmsizecod = data[4] & 0x3F;
+    if fscod >= 3 || frmsizecod >= 38 {
+        return None;
+    }
+    Some(FRMSIZECOD_TABLE[frmsizecod as usize][fscod as usize] as usize * 2)
 }
 
 #[derive(Debug)]
@@ -31,6 +112,21 @@ pub enum AudioMode {
     Quad { surmixlev: u8 },
     /// 3/2 (L, C, R, SL, SR)
     FiveChannel { cmixlev: u8, surmixlev: u8 },
+}
+
+impl AudioMode {
+    pub fn nfchans(&self) -> u8 {
+        match self {
+            AudioMode::DualMono { .. } => 2,
+            AudioMode::Center => 1,
+            AudioMode::Stereo { .. } => 2,
+            AudioMode::ThreeFront { .. } => 3,
+            AudioMode::StereoSurround { .. } => 3,
+            AudioMode::LcrSurround { .. } => 4,
+            AudioMode::Quad { .. } => 4,
+            AudioMode::FiveChannel { .. } => 5,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -61,6 +157,7 @@ pub struct Addbsi {
 pub struct BitStreamInformation {
     pub bsid: u8,
     pub bsmod: u8,
+    pub acmod: u8,
     pub audio_mode: AudioMode,
     pub lfeon: bool,
     pub dialnorm: u8,
@@ -75,17 +172,236 @@ pub struct BitStreamInformation {
 }
 
 #[derive(Debug)]
-pub struct AudioBlock {
-    pub ab_0: Vec<u8>,
-    pub ab_1: Vec<u8>,
-    pub ab_2: Vec<u8>,
-    pub ab_3: Vec<u8>,
-    pub ab_4: Vec<u8>,
-    pub ab_5: Vec<u8>,
+pub enum CplStrategy {
+    /// Using previous audio block coupling strategy (cplstre=0)
+    Reuse,
+    /// Not using coupling (cplstre=1, cplinu=0)
+    NotInUse,
+    /// Using coupling (cplstre=1, cplinu=1)
+    InUse {
+        chincpl: Vec<bool>,
+        phsflginu: Option<bool>,
+        cplbegf: u8,
+        cplendf: u8,
+        cplbndstrc: Vec<bool>,
+    },
+}
+
+// ----------------------------------------------
+// Coupling
+#[derive(Debug)]
+pub struct CplChannelCoord {
+    pub mstrcplco: u8,
+    pub bands: Vec<(u8, u8)>,
 }
 
 #[derive(Debug)]
-pub struct AuxiliaryData {}
+pub struct CplCoord {
+    pub channels: Vec<Option<CplChannelCoord>>,
+    pub phsflg: Option<Vec<bool>>,
+}
+
+#[derive(Debug)]
+pub struct Cpl {
+    pub strategy: CplStrategy,
+    pub coord: Option<CplCoord>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Rematrixing operation (2/0 mode only)
+#[derive(Debug)]
+pub struct Rematrixing {
+    pub rematflg: Option<Vec<bool>>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Exponent strategy
+#[derive(Debug)]
+pub struct ExponentStrategy {
+    pub cplexpstr: Option<u8>,
+    pub chexpstr: Vec<u8>,
+    pub lfeexpstr: Option<bool>,
+    pub chbwcod: Vec<Option<u8>>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Coupling channel exponents
+#[derive(Debug)]
+pub struct CouplingChannelExponent {
+    pub cplabsexp: u8,
+    pub cplexps: Vec<u8>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Full bandwidth channels exponents
+#[derive(Debug)]
+pub struct FullBandwidthChannelExponent {
+    pub abs_exp: u8,
+    pub exps: Vec<u8>,
+    pub gainrng: u8,
+}
+
+#[derive(Debug)]
+pub struct FullBandwidthChannelExponents {
+    pub channels: Vec<Option<FullBandwidthChannelExponent>>, // None = reuse
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Low frequency effects channel
+#[derive(Debug)]
+pub struct LowFrequencyEffectChannel {
+    pub abs_exp: u8,
+    pub lfeexps: Vec<u8>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Bit-allocation parametric information
+#[derive(Debug, Clone)]
+pub struct BitAllocParams {
+    pub sdcycod: u8,
+    pub fdcycod: u8,
+    pub sgaincod: u8,
+    pub dbpbcod: u8,
+    pub floorcod: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct SnrOffset {
+    pub csnroffst: u8,
+    pub cplfsnroffst: Option<u8>,
+    pub cplfgaincod: Option<u8>,
+    pub fsnroffst: Vec<u8>,
+    pub fgaincod: Vec<u8>,
+    pub lfefsnroffst: Option<u8>,
+    pub lfefgaincod: Option<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CplLeak {
+    pub cplfleak: u8,
+    pub cplsleak: u8,
+}
+
+#[derive(Debug)]
+pub struct BitAllocationParametricInformation {
+    pub bai: Option<BitAllocParams>,
+    pub snroffst: Option<SnrOffset>,
+    pub cplleak: Option<CplLeak>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Delta bit allocation information
+#[derive(Debug, Clone)]
+pub struct DeltBaSegment {
+    pub deltoffst: u8,
+    pub deltlen: u8,
+    pub deltba: u8,
+}
+
+#[derive(Debug)]
+pub struct DeltaBitAllocationInformation {
+    pub cpldeltbae: Option<u8>,
+    pub deltbae: Vec<u8>,
+    pub cpldeltsegs: Option<Vec<DeltBaSegment>>,
+    pub deltsegs: Vec<Option<Vec<DeltBaSegment>>>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Inclusion of unused dummy data
+#[derive(Debug)]
+pub struct UnusedDummyData {
+    pub skipl: u16,
+    pub skipfld: Vec<u8>,
+}
+// ----------------------------------------------
+
+// ----------------------------------------------
+// Quantized mantissa values
+#[derive(Debug)]
+pub struct QuantizedMantissaValues {
+    pub chmant: Vec<Vec<i32>>,     // [ch][bin], nfchans channels
+    pub cplmant: Option<Vec<i32>>, // coupling channel mantissas
+    pub lfemant: Option<Vec<i32>>, // LFE channel mantissas
+}
+// ----------------------------------------------
+
+#[derive(Debug)]
+pub struct AudioBlock {
+    pub blksw: Vec<bool>,
+    pub dithflag: Vec<bool>,
+    pub dynrng: Option<u8>,
+    pub dynrng2: Option<u8>,
+    pub cpl: Cpl,
+    pub rematrixing: Rematrixing,
+    pub exponent_strategy: ExponentStrategy,
+    pub cpl_ch_exps: Option<CouplingChannelExponent>,
+    pub fb_ch_exps: FullBandwidthChannelExponents,
+    pub lfe_ch_exps: Option<Option<LowFrequencyEffectChannel>>,
+    pub bapi: BitAllocationParametricInformation,
+    pub deltbai: Option<DeltaBitAllocationInformation>,
+    pub unused_dummy: Option<UnusedDummyData>,
+    pub mantissas: QuantizedMantissaValues,
+}
+
+/// Effective delta BA state: resolved per-channel and coupling delta segments.
+/// Unlike `DeltaBitAllocationInformation` (which stores raw parsed data including
+/// reuse/none codes), this stores the final resolved segments for BAP computation.
+pub struct EffectiveDeltBa {
+    pub cpldeltsegs: Option<Vec<DeltBaSegment>>,
+    pub deltsegs: Vec<Option<Vec<DeltBaSegment>>>,
+}
+
+/// Decoded state carried between audio blocks for cross-block reuse.
+pub struct AudblkDecodedState {
+    pub cplinu: bool,
+    pub chincpl: Vec<bool>,
+    pub phsflginu: bool,
+    pub ncplbnd: usize,
+    pub cplbegf: Option<u8>,
+    pub cplendf: Option<u8>,
+    pub bai: Option<BitAllocParams>,
+    pub snroffst: Option<SnrOffset>,
+    pub cplleak: Option<CplLeak>,
+    pub eff_deltba: Option<EffectiveDeltBa>,
+    pub ch_decoded_exps: Vec<[u8; 256]>,
+    pub cpl_decoded_exps: Option<[u8; 256]>,
+    pub lfe_decoded_exps: Option<[u8; 256]>,
+    pub chbwcod: Vec<Option<u8>>,
+}
+
+impl AudblkDecodedState {
+    fn initial(nfchans: u8) -> Self {
+        Self {
+            cplinu: false,
+            chincpl: vec![false; nfchans as usize],
+            phsflginu: false,
+            ncplbnd: 0,
+            cplbegf: None,
+            cplendf: None,
+            bai: None,
+            snroffst: None,
+            cplleak: None,
+            eff_deltba: None,
+            ch_decoded_exps: vec![[0u8; 256]; nfchans as usize],
+            cpl_decoded_exps: None,
+            lfe_decoded_exps: None,
+            chbwcod: vec![None; nfchans as usize],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct AuxiliaryData {
+    pub auxdata: Vec<u8>,
+}
 
 #[derive(Debug)]
 pub struct ErrorCheck {
@@ -97,7 +413,7 @@ pub struct ErrorCheck {
 pub struct Ac3 {
     pub si: SyncInfo,
     pub bsi: BitStreamInformation,
-    pub ab: AudioBlock,
+    pub ab: Vec<AudioBlock>,
     pub aux: AuxiliaryData,
     pub ec: ErrorCheck,
 }
@@ -116,13 +432,58 @@ impl Ac3 {
         // bsi
         let bsi = Self::parse_bsi(&mut reader)?;
 
-        // audblk
+        let nfchans = bsi.audio_mode.nfchans();
 
-        // auxdata
+        // audblk ×6
+        let mut audblks = Vec::with_capacity(6);
+        let mut prev = AudblkDecodedState::initial(nfchans);
 
-        // errorcheck
+        for blk_idx in 0..6 {
+            // Skip data (unused dummy) in a previous block may have consumed
+            // all remaining bits in the frame.
+            if reader.remaining_bits() < 5 {
+                break;
+            }
+            let result =
+                Self::parse_audblk(&mut reader, nfchans, bsi.acmod, bsi.lfeon, si.fscod, &prev);
+            let (blk, state) = match result {
+                Ok(v) => v,
+                Err(_) if blk_idx > 0 => {
+                    // AC-3 encoders may pack meaningful audio data in early blocks
+                    // and fill remaining blocks with padding/garbage.
+                    // this with error concealment. We stop parsing blocks here.
+                    break;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+            audblks.push(blk);
+            prev = state;
+        }
 
-        todo!()
+        // Parse auxdata and errorcheck if enough bits remain
+        let aux = if reader.remaining_bits() >= 17 {
+            Self::parse_auxdata(&mut reader)?
+        } else {
+            AuxiliaryData { auxdata: vec![] }
+        };
+        let ec = if reader.remaining_bits() >= 17 {
+            Self::parse_errorcheck(&mut reader)?
+        } else {
+            ErrorCheck {
+                crcrsv: false,
+                crc2: 0,
+            }
+        };
+
+        Ok(Ac3 {
+            si,
+            bsi,
+            ab: audblks,
+            aux,
+            ec,
+        })
     }
 
     fn parse_si(reader: &mut BitstreamReader<'_>) -> Result<SyncInfo, Error> {
@@ -275,6 +636,7 @@ impl Ac3 {
         Ok(BitStreamInformation {
             bsid,
             bsmod,
+            acmod,
             audio_mode,
             lfeon,
             dialnorm,
@@ -287,5 +649,843 @@ impl Ac3 {
             xbsi2,
             addbsi,
         })
+    }
+
+    fn parse_audblk(
+        reader: &mut BitstreamReader<'_>,
+        nfchans: u8,
+        acmod: u8,
+        lfeon: bool,
+        fscod: u8,
+        prev: &AudblkDecodedState,
+    ) -> Result<(AudioBlock, AudblkDecodedState), Error> {
+        // blksw[ch] - 1 bit each
+        let mut blksw = Vec::with_capacity(nfchans as usize);
+        for _ in 0..nfchans {
+            blksw.push(reader.read_bit()?);
+        }
+        // dithflag[ch] - 1 bit each
+        let mut dithflag = Vec::with_capacity(nfchans as usize);
+        for _ in 0..nfchans {
+            dithflag.push(reader.read_bit()?);
+        }
+
+        let dynrnge = reader.read_bit()?;
+        let dynrng = if dynrnge {
+            Some(reader.read_bits(8)? as u8)
+        } else {
+            None
+        };
+
+        let dynrng2 = if acmod == 0 {
+            let dynrng2e = reader.read_bit()?;
+            if dynrng2e {
+                Some(reader.read_bits(8)? as u8)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // ------------------------------------------------------------------------------------------
+        // coupling strategy
+        let cplstre = reader.read_bit()?;
+        let mut cplinu = prev.cplinu;
+        let mut chincpl: Vec<bool> = prev.chincpl.to_vec();
+        let mut phsflginu = prev.phsflginu;
+        let mut ncplbnd = prev.ncplbnd;
+
+        let strategy = if cplstre {
+            cplinu = reader.read_bit()?;
+            if cplinu {
+                chincpl = Vec::with_capacity(nfchans as usize);
+                for _ in 0..nfchans {
+                    chincpl.push(reader.read_bit()?);
+                }
+                phsflginu = if acmod == 0x2 {
+                    reader.read_bit()?
+                } else {
+                    false
+                };
+                let cplbegf = reader.read_bits(4)? as u8;
+                let cplendf = reader.read_bits(4)? as u8;
+                let ncplsubnd = (3 + cplendf)
+                    .checked_sub(cplbegf)
+                    .ok_or(Error::InvalidState(
+                        "invalid coupling range: ncplsubnd would be negative",
+                    ))? as usize;
+                let mut cplbndstrc = Vec::with_capacity(ncplsubnd.saturating_sub(1));
+                for _ in 1..ncplsubnd {
+                    cplbndstrc.push(reader.read_bit()?);
+                }
+                // ncplbnd: number of coupling bands
+                // ncplbnd = (ncplsubnd – (cplbndstrc[1] + ... + cplbndstrc[ncplsubnd – 1]))
+                //         = ncplsubnd - {number of true in cplbndstrc}
+                //         = 1 + cplbndstrc.len() - {number of true in cplbndstrc}
+                //         = 1 + {number of false in cplbndstrc}
+                ncplbnd = 1;
+                for &strc in &cplbndstrc {
+                    if !strc {
+                        ncplbnd += 1;
+                    }
+                }
+                CplStrategy::InUse {
+                    chincpl: chincpl.clone(),
+                    phsflginu: if acmod == 0x2 { Some(phsflginu) } else { None },
+                    cplbegf,
+                    cplendf,
+                    cplbndstrc,
+                }
+            } else {
+                // reset coupling
+                chincpl = vec![false; nfchans as usize];
+                phsflginu = false;
+                ncplbnd = 0;
+                CplStrategy::NotInUse
+            }
+        } else {
+            CplStrategy::Reuse
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // coupling coordinates
+        let coord = if cplinu {
+            let mut channels = Vec::with_capacity(nfchans as usize);
+            let mut cplcoe = Vec::with_capacity(nfchans as usize);
+            for (_ch, &in_cpl) in chincpl.iter().enumerate().take(nfchans as usize) {
+                if in_cpl {
+                    let has_coe = reader.read_bit()?;
+                    cplcoe.push(has_coe);
+                    if has_coe {
+                        let mstrcplco = reader.read_bits(2)? as u8;
+                        let mut bands = Vec::with_capacity(ncplbnd);
+                        for _ in 0..ncplbnd {
+                            let cplcoexp = reader.read_bits(4)? as u8;
+                            let cplcomant = reader.read_bits(4)? as u8;
+                            bands.push((cplcoexp, cplcomant));
+                        }
+                        channels.push(Some(CplChannelCoord { mstrcplco, bands }));
+                    } else {
+                        channels.push(None);
+                    }
+                } else {
+                    cplcoe.push(false);
+                    channels.push(None);
+                }
+            }
+
+            let phsflg = if acmod == 0x2
+                && phsflginu
+                && (cplcoe.first() == Some(&true) || cplcoe.get(1) == Some(&true))
+            {
+                let mut flags = Vec::with_capacity(ncplbnd);
+                for _ in 0..ncplbnd {
+                    flags.push(reader.read_bit()?);
+                }
+                Some(flags)
+            } else {
+                None
+            };
+
+            Some(CplCoord { channels, phsflg })
+        } else {
+            None
+        };
+
+        let cpl = Cpl { strategy, coord };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // rematrixing (2/0 mode only)
+        let rematflg = if acmod == 0x2 {
+            let rematstr = reader.read_bit()?;
+            if rematstr {
+                let rematcplbegf = match &cpl.strategy {
+                    CplStrategy::InUse { cplbegf, .. } => Some(*cplbegf),
+                    _ => prev.cplbegf,
+                };
+                let nrematbnds = if !cplinu || rematcplbegf.is_none_or(|f| f > 2) {
+                    4
+                } else if rematcplbegf.is_some_and(|f| f > 0) {
+                    3
+                } else {
+                    2
+                };
+                let mut flags = Vec::with_capacity(nrematbnds);
+                for _ in 0..nrematbnds {
+                    flags.push(reader.read_bit()?);
+                }
+                Some(flags)
+            } else {
+                None // reuse previous
+            }
+        } else {
+            None
+        };
+        let rematrixing = Rematrixing { rematflg };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // exponent strategies
+        let cplexpstr = if cplinu {
+            Some(reader.read_bits(2)? as u8)
+        } else {
+            None
+        };
+        let mut chexpstr = Vec::with_capacity(nfchans as usize);
+        for _ in 0..nfchans {
+            chexpstr.push(reader.read_bits(2)? as u8);
+        }
+        let lfeexpstr = if lfeon {
+            Some(reader.read_bit()?)
+        } else {
+            None
+        };
+
+        // channel bandwidth code
+        let mut chbwcod = Vec::with_capacity(nfchans as usize);
+        for ch in 0..nfchans as usize {
+            if chexpstr[ch] != 0 {
+                // not reuse
+                if !chincpl[ch] {
+                    chbwcod.push(Some(reader.read_bits(6)? as u8));
+                } else {
+                    chbwcod.push(None);
+                }
+            } else {
+                // reuse
+                chbwcod.push(prev.chbwcod.get(ch).copied().flatten());
+            }
+        }
+
+        let exponent_strategy = ExponentStrategy {
+            cplexpstr,
+            chexpstr: chexpstr.clone(),
+            lfeexpstr,
+            chbwcod: chbwcod.clone(),
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // coupling channel exponents
+        let cplbegf = match &cpl.strategy {
+            CplStrategy::InUse { cplbegf, .. } => Some(*cplbegf),
+            _ => prev.cplbegf,
+        };
+        let cplendf = match &cpl.strategy {
+            CplStrategy::InUse { cplendf, .. } => Some(*cplendf),
+            _ => prev.cplendf,
+        };
+
+        let cpl_ch_exps = if cplinu {
+            let cplexpstr_val =
+                cplexpstr.ok_or(Error::InvalidState("cplexpstr missing while cplinu"))?;
+            if cplexpstr_val != 0 {
+                // new coupling exponents
+                let cplabsexp = reader.read_bits(4)? as u8;
+                let ncplsubnd = (3 + cplendf.ok_or(Error::InvalidState("cplendf missing"))?
+                    - cplbegf.ok_or(Error::InvalidState("cplbegf missing"))?)
+                    as usize;
+                // ncplgrps = (cplendmant – cplstrtmant) / 3;   // for D15 mode
+                //          = (cplendmant – cplstrtmant) / 6;   // for D25 mode
+                //          = (cplendmant – cplstrtmant) / 12;  // for D45 mode
+                // cplstrtmant = (cplbegf * 12) + 37
+                // cplendmant = ((cplendf + 3) * 12) + 37
+                // ncplsubnd = 3 + cplendf - cplbegf
+                // cplendmant - cplstrtmant = 12 * ncplsubnd
+                let ncplgrps = match cplexpstr_val {
+                    1 => ncplsubnd * 4, // D15
+                    2 => ncplsubnd * 2, // D25
+                    3 => ncplsubnd,     // D45
+                    _ => return Err(Error::InvalidState("invalid cplexpstr")),
+                };
+                let mut cplexps = Vec::with_capacity(ncplgrps);
+                for _ in 0..ncplgrps {
+                    cplexps.push(reader.read_bits(7)? as u8);
+                }
+                Some(CouplingChannelExponent { cplabsexp, cplexps })
+            } else {
+                None // reuse previous block's coupling exponents
+            }
+        } else {
+            None // coupling not in use
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // full bandwidth channel exponents
+        let mut fb_channels: Vec<Option<FullBandwidthChannelExponent>> =
+            Vec::with_capacity(nfchans as usize);
+        for ch in 0..nfchans as usize {
+            // not reuse
+            if chexpstr[ch] != 0 {
+                let abs_exp = reader.read_bits(4)? as u8;
+                // endmant:   number of mantissa coefficients
+                // coupled:   cplstrtmant = (cplbegf * 12) + 37
+                // uncoupled: endmant[ch] = chbwcod[ch] * 3 + 73
+                let endmant = if chincpl[ch] {
+                    37 + 12 * cplbegf.ok_or(Error::InvalidState("cplbegf missing"))? as usize
+                } else {
+                    73 + 3 * chbwcod[ch].ok_or(Error::InvalidState("chbwcod missing"))? as usize
+                };
+                let nchgrps = match chexpstr[ch] {
+                    1 => (endmant - 1) / 3,      // D15: (endmant-1+3-3)/3
+                    2 => (endmant - 1 + 3) / 6,  // D25: (endmant-1+6-3)/6
+                    3 => (endmant - 1 + 9) / 12, // D45: (endmant-1+12-3)/12
+                    _ => unreachable!(),
+                };
+                let mut exps = Vec::with_capacity(nchgrps);
+                for _ in 0..nchgrps {
+                    exps.push(reader.read_bits(7)? as u8);
+                }
+                let gainrng = reader.read_bits(2)? as u8;
+                fb_channels.push(Some(FullBandwidthChannelExponent {
+                    abs_exp,
+                    exps,
+                    gainrng,
+                }));
+            } else {
+                fb_channels.push(None); // reuse
+            }
+        }
+        let fb_ch_exps = FullBandwidthChannelExponents {
+            channels: fb_channels,
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // Low frequency effects exponents
+        let lfe_ch_exps: Option<Option<LowFrequencyEffectChannel>> = if lfeon {
+            if lfeexpstr.is_some_and(|s| s) {
+                let abs_exp = reader.read_bits(4)? as u8;
+                let nlfegrps: usize = 2;
+                let mut lfeexps = Vec::with_capacity(nlfegrps);
+                for _ in 0..nlfegrps {
+                    lfeexps.push(reader.read_bits(7)? as u8);
+                }
+                Some(Some(LowFrequencyEffectChannel { abs_exp, lfeexps }))
+            } else {
+                Some(None) // reuse
+            }
+        } else {
+            None // no LFE channel
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // Bit-allocation parametric information
+        let bai = if reader.read_bit()? {
+            Some(BitAllocParams {
+                sdcycod: reader.read_bits(2)? as u8,
+                fdcycod: reader.read_bits(2)? as u8,
+                sgaincod: reader.read_bits(2)? as u8,
+                dbpbcod: reader.read_bits(2)? as u8,
+                floorcod: reader.read_bits(3)? as u8,
+            })
+        } else {
+            None
+        };
+
+        // SNR offset
+        let snroffst = if reader.read_bit()? {
+            let csnroffst = reader.read_bits(6)? as u8;
+            let (cplfsnroffst, cplfgaincod) = if cplinu {
+                (
+                    Some(reader.read_bits(4)? as u8),
+                    Some(reader.read_bits(3)? as u8),
+                )
+            } else {
+                (None, None)
+            };
+            let mut fsnroffst = Vec::with_capacity(nfchans as usize);
+            let mut fgaincod = Vec::with_capacity(nfchans as usize);
+            for _ in 0..nfchans {
+                fsnroffst.push(reader.read_bits(4)? as u8);
+                fgaincod.push(reader.read_bits(3)? as u8);
+            }
+            let (lfefsnroffst, lfefgaincod) = if lfeon {
+                (
+                    Some(reader.read_bits(4)? as u8),
+                    Some(reader.read_bits(3)? as u8),
+                )
+            } else {
+                (None, None)
+            };
+            Some(SnrOffset {
+                csnroffst,
+                cplfsnroffst,
+                cplfgaincod,
+                fsnroffst,
+                fgaincod,
+                lfefsnroffst,
+                lfefgaincod,
+            })
+        } else {
+            None
+        };
+
+        // Coupling leak
+        let cplleak = if cplinu {
+            if reader.read_bit()? {
+                Some(CplLeak {
+                    cplfleak: reader.read_bits(3)? as u8,
+                    cplsleak: reader.read_bits(3)? as u8,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let bit_allocation_parametric_information = BitAllocationParametricInformation {
+            bai: bai.clone(),
+            snroffst: snroffst.clone(),
+            cplleak: cplleak.clone(),
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // Delta bit allocation information
+        let deltbai = if reader.read_bit()? {
+            let cpldeltbae = if cplinu {
+                Some(reader.read_bits(2)? as u8)
+            } else {
+                None
+            };
+            let mut deltbae = Vec::with_capacity(nfchans as usize);
+            for _ in 0..nfchans {
+                deltbae.push(reader.read_bits(2)? as u8);
+            }
+
+            // coupling delta segments (cpldeltbae == 1 means "new info follows")
+            let cpldeltsegs = if cplinu && cpldeltbae == Some(1) {
+                let cpldeltnseg = reader.read_bits(3)? as usize;
+                let mut segs = Vec::with_capacity(cpldeltnseg + 1);
+                for _ in 0..=cpldeltnseg {
+                    segs.push(DeltBaSegment {
+                        deltoffst: reader.read_bits(5)? as u8,
+                        deltlen: reader.read_bits(4)? as u8,
+                        deltba: reader.read_bits(3)? as u8,
+                    });
+                }
+                Some(segs)
+            } else {
+                None
+            };
+
+            // per-channel delta segments (deltbae[ch] == 1: "new info follows")
+            let mut deltsegs = Vec::with_capacity(nfchans as usize);
+            for (_ch, &mode) in deltbae.iter().enumerate().take(nfchans as usize) {
+                if mode == 1 {
+                    let deltnseg = reader.read_bits(3)? as usize;
+                    let mut segs = Vec::with_capacity(deltnseg + 1);
+                    for _ in 0..=deltnseg {
+                        segs.push(DeltBaSegment {
+                            deltoffst: reader.read_bits(5)? as u8,
+                            deltlen: reader.read_bits(4)? as u8,
+                            deltba: reader.read_bits(3)? as u8,
+                        });
+                    }
+                    deltsegs.push(Some(segs));
+                } else {
+                    deltsegs.push(None);
+                }
+            }
+
+            Some(DeltaBitAllocationInformation {
+                cpldeltbae,
+                deltbae,
+                cpldeltsegs,
+                deltsegs,
+            })
+        } else {
+            None
+        };
+
+        // Resolve effective delta BA: handle reuse (0), new (1), none (2)
+        let eff_deltba = if let Some(ref dba) = deltbai {
+            // deltbaie==1: resolve each channel's deltbae
+            // cpldeltbae: 0=reuse prev, 1=new (already in cpldeltsegs), 2=none
+            let eff_cpldeltsegs = match dba.cpldeltbae {
+                Some(0) => prev.eff_deltba.as_ref().and_then(|p| p.cpldeltsegs.clone()),
+                Some(1) => dba.cpldeltsegs.clone(),
+                _ => None, // 2=none, 3=reserved, or not coupling
+            };
+            // deltbae[ch]: 0=reuse prev, 1=new (already in deltsegs), 2=none
+            let mut eff_deltsegs = Vec::with_capacity(nfchans as usize);
+            for ch in 0..nfchans as usize {
+                let seg = match dba.deltbae[ch] {
+                    0 => prev
+                        .eff_deltba
+                        .as_ref()
+                        .and_then(|p| p.deltsegs.get(ch).cloned())
+                        .flatten(),
+                    1 => dba.deltsegs[ch].clone(),
+                    _ => None, // 2=none, 3=reserved
+                };
+                eff_deltsegs.push(seg);
+            }
+            Some(EffectiveDeltBa {
+                cpldeltsegs: eff_cpldeltsegs,
+                deltsegs: eff_deltsegs,
+            })
+        } else {
+            // deltbaie==0: reuse entire previous effective delta BA
+            prev.eff_deltba.as_ref().map(|p| EffectiveDeltBa {
+                cpldeltsegs: p.cpldeltsegs.clone(),
+                deltsegs: p.deltsegs.clone(),
+            })
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // Inclusion of unused dummy data
+        let unused_dummy = if reader.read_bit()? {
+            let skipl = reader.read_bits(9)? as u16;
+            // Skip the dummy data; truncate at frame boundary if needed
+            let skip_bits = skipl as usize * 8;
+            reader.skip_bits(skip_bits);
+            Some(UnusedDummyData {
+                skipl,
+                skipfld: vec![],
+            })
+        } else {
+            None
+        };
+        // ------------------------------------------------------------------------------------------
+
+        // ------------------------------------------------------------------------------------------
+        // Quantized mantissa values
+
+        // nchmant[ch] = endmant[ch]
+        let mut nchmant = Vec::with_capacity(nfchans as usize);
+        for ch in 0..nfchans as usize {
+            let endmant = if chincpl[ch] {
+                37 + 12 * cplbegf.ok_or(Error::InvalidState("cplbegf missing"))? as usize
+            } else {
+                73 + 3 * chbwcod[ch].ok_or(Error::InvalidState("chbwcod missing"))? as usize
+            };
+            nchmant.push(endmant);
+        }
+
+        // ncplmant = 12 * ncplsubnd
+        //          = 12 * (3 + cplendf - cplbegf)
+        let ncplmant = if cplinu {
+            let begf = cplbegf.ok_or(Error::InvalidState("cplbegf missing"))? as usize;
+            let endf = cplendf.ok_or(Error::InvalidState("cplendf missing"))? as usize;
+            12 * (3 + endf - begf)
+        } else {
+            0
+        };
+
+        // Decode exponents: grouped -> per-bin
+        // Full bandwidth channels
+        let mut ch_decoded_exps: Vec<[u8; 256]> = prev.ch_decoded_exps.clone();
+        for ch in 0..nfchans as usize {
+            if chexpstr[ch] != 0 {
+                let fb = fb_ch_exps.channels[ch]
+                    .as_ref()
+                    .ok_or(Error::InvalidState("fb exponent missing"))?;
+                ch_decoded_exps[ch] =
+                    Self::decode_exponents(fb.abs_exp, &fb.exps, chexpstr[ch], nchmant[ch]);
+            }
+        }
+
+        // Coupling channel
+        let cpl_decoded_exps = if cplinu {
+            let cplexpstr_val =
+                cplexpstr.ok_or(Error::InvalidState("cplexpstr missing while cplinu"))?;
+            if cplexpstr_val != 0 {
+                let cpl_exp = cpl_ch_exps
+                    .as_ref()
+                    .ok_or(Error::InvalidState("cpl exponent missing"))?;
+                // Coupling channel absolute exponent is
+                // stored as 4 bits but represents even values (0,2,4,...,30),
+                // so it must be left-shifted by 1 before use.
+                Some(Self::decode_exponents(
+                    cpl_exp.cplabsexp << 1,
+                    &cpl_exp.cplexps,
+                    cplexpstr_val,
+                    ncplmant,
+                ))
+            } else {
+                // Reuse previous block's decoded coupling exponents
+                Some(
+                    prev.cpl_decoded_exps
+                        .ok_or(Error::InvalidState("no previous cpl exponents for reuse"))?,
+                )
+            }
+        } else {
+            None
+        };
+
+        // LFE channel (always D15, nlfemant=7)
+        let lfe_decoded_exps = if lfeon {
+            if lfeexpstr.is_some_and(|s| s) {
+                let lfe = lfe_ch_exps
+                    .as_ref()
+                    .and_then(|o| o.as_ref())
+                    .ok_or(Error::InvalidState("lfe exponent missing"))?;
+                Some(Self::decode_exponents(lfe.abs_exp, &lfe.lfeexps, 1, 7))
+            } else {
+                // Reuse previous block's decoded LFE exponents
+                Some(
+                    prev.lfe_decoded_exps
+                        .ok_or(Error::InvalidState("no previous lfe exponents for reuse"))?,
+                )
+            }
+        } else {
+            None
+        };
+
+        // Resolve bai/snroffst/cplleak: use current if present, otherwise previous block
+        let eff_bai = bai
+            .as_ref()
+            .or(prev.bai.as_ref())
+            .ok_or(Error::InvalidState("bai missing (no current or previous)"))?;
+        let eff_snroffst =
+            snroffst
+                .as_ref()
+                .or(prev.snroffst.as_ref())
+                .ok_or(Error::InvalidState(
+                    "snroffst missing (no current or previous)",
+                ))?;
+
+        // Helper: convert DeltBaSegment to tuple for compute_bap
+        let segs_to_tuples = |segs: &[DeltBaSegment]| -> Vec<(u8, u8, u8)> {
+            segs.iter()
+                .map(|s| (s.deltoffst, s.deltlen, s.deltba))
+                .collect()
+        };
+
+        // Resolve effective cplleak for coupling BAP computation
+        let eff_cplleak = cplleak
+            .as_ref()
+            .or(prev.cplleak.as_ref())
+            .map(|cl| (cl.cplfleak, cl.cplsleak));
+
+        // Per-channel bap
+        let mut ch_bap = Vec::with_capacity(nfchans as usize);
+        for ch in 0..nfchans as usize {
+            let params = BapParams {
+                sdcycod: eff_bai.sdcycod,
+                fdcycod: eff_bai.fdcycod,
+                sgaincod: eff_bai.sgaincod,
+                dbpbcod: eff_bai.dbpbcod,
+                floorcod: eff_bai.floorcod,
+                csnroffst: eff_snroffst.csnroffst,
+                fsnroffst: eff_snroffst.fsnroffst[ch],
+                fgaincod: eff_snroffst.fgaincod[ch],
+                fscod,
+            };
+            let deltba_tuples = eff_deltba.as_ref().and_then(|d| {
+                d.deltsegs
+                    .get(ch)
+                    .and_then(|s| s.as_ref().map(|segs| segs_to_tuples(segs)))
+            });
+            ch_bap.push(compute_bap(
+                &ch_decoded_exps[ch],
+                0,
+                nchmant[ch],
+                &params,
+                deltba_tuples.as_deref(),
+                None, // cplleak only for coupling channel
+            ));
+        }
+
+        // Coupling channel bap
+        let cpl_bap = if cplinu {
+            let cplstrtmant =
+                37 + 12 * cplbegf.ok_or(Error::InvalidState("cplbegf missing"))? as usize;
+            let cplendmant = cplstrtmant + ncplmant;
+            let params = BapParams {
+                sdcycod: eff_bai.sdcycod,
+                fdcycod: eff_bai.fdcycod,
+                sgaincod: eff_bai.sgaincod,
+                dbpbcod: eff_bai.dbpbcod,
+                floorcod: eff_bai.floorcod,
+                csnroffst: eff_snroffst.csnroffst,
+                fsnroffst: eff_snroffst.cplfsnroffst.unwrap_or(0),
+                fgaincod: eff_snroffst.cplfgaincod.unwrap_or(0),
+                fscod,
+            };
+            let deltba_tuples = eff_deltba
+                .as_ref()
+                .and_then(|d| d.cpldeltsegs.as_ref().map(|segs| segs_to_tuples(segs)));
+            Some(compute_bap(
+                cpl_decoded_exps
+                    .as_ref()
+                    .ok_or(Error::InvalidState("cpl decoded exps missing"))?,
+                cplstrtmant,
+                cplendmant,
+                &params,
+                deltba_tuples.as_deref(),
+                eff_cplleak,
+            ))
+        } else {
+            None
+        };
+
+        // LFE channel bap
+        let lfe_bap = if lfeon {
+            let params = BapParams {
+                sdcycod: eff_bai.sdcycod,
+                fdcycod: eff_bai.fdcycod,
+                sgaincod: eff_bai.sgaincod,
+                dbpbcod: eff_bai.dbpbcod,
+                floorcod: eff_bai.floorcod,
+                csnroffst: eff_snroffst.csnroffst,
+                fsnroffst: eff_snroffst
+                    .lfefsnroffst
+                    .ok_or(Error::InvalidState("lfefsnroffst missing"))?,
+                fgaincod: eff_snroffst
+                    .lfefgaincod
+                    .ok_or(Error::InvalidState("lfefgaincod missing"))?,
+                fscod,
+            };
+            Some(compute_bap(
+                lfe_decoded_exps
+                    .as_ref()
+                    .ok_or(Error::InvalidState("lfe decoded exps missing"))?,
+                0,
+                7,
+                &params,
+                None,
+                None, // no cplleak for LFE
+            ))
+        } else {
+            None
+        };
+
+        let ch_bap_with_mant: Vec<(Vec<u8>, usize)> =
+            ch_bap.into_iter().zip(nchmant.iter().copied()).collect();
+        let cpl_bap_pair = cpl_bap.as_deref().map(|b| (b, ncplmant));
+        let mant_params = MantissaParams {
+            channels: &ch_bap_with_mant,
+            chincpl: &chincpl,
+            coupling: cpl_bap_pair,
+            lfe: lfe_bap.as_deref(),
+        };
+        let mantissas = parse_mantissas(reader, &mant_params)?;
+        // ------------------------------------------------------------------------------------------
+
+        let state = AudblkDecodedState {
+            cplinu,
+            chincpl,
+            phsflginu,
+            ncplbnd,
+            cplbegf,
+            cplendf,
+            bai: bai.or_else(|| prev.bai.clone()),
+            snroffst: snroffst.or_else(|| prev.snroffst.clone()),
+            cplleak: cplleak.or_else(|| prev.cplleak.clone()),
+            eff_deltba,
+            ch_decoded_exps,
+            cpl_decoded_exps,
+            lfe_decoded_exps,
+            chbwcod,
+        };
+
+        Ok((
+            AudioBlock {
+                blksw,
+                dithflag,
+                dynrng,
+                dynrng2,
+                cpl,
+                rematrixing,
+                exponent_strategy,
+                cpl_ch_exps,
+                fb_ch_exps,
+                lfe_ch_exps,
+                bapi: bit_allocation_parametric_information,
+                deltbai,
+                unused_dummy,
+                mantissas,
+            },
+            state,
+        ))
+    }
+
+    /// auxdata: variable-length data between the last audblk and errorcheck.
+    /// Length is determined by remaining bits minus 17 (errorcheck size).
+    fn parse_auxdata(reader: &mut BitstreamReader<'_>) -> Result<AuxiliaryData, Error> {
+        let remaining = reader.remaining_bits();
+        let aux_bits = remaining.saturating_sub(17);
+        let aux_full_bytes = aux_bits / 8;
+        let aux_leftover_bits = aux_bits % 8;
+        let mut auxdata =
+            Vec::with_capacity(aux_full_bytes + if aux_leftover_bits > 0 { 1 } else { 0 });
+        for _ in 0..aux_full_bytes {
+            auxdata.push(reader.read_bits(8)? as u8);
+        }
+        if aux_leftover_bits > 0 {
+            auxdata.push(reader.read_bits(aux_leftover_bits as u8)? as u8);
+        }
+        Ok(AuxiliaryData { auxdata })
+    }
+
+    /// errorcheck: crcrsv (1 bit) + crc2 (16 bits)
+    fn parse_errorcheck(reader: &mut BitstreamReader<'_>) -> Result<ErrorCheck, Error> {
+        Ok(ErrorCheck {
+            crcrsv: reader.read_bit()?,
+            crc2: reader.read_bits(16)? as u16,
+        })
+    }
+
+    /// Decode grouped differential exponents into per-bin absolute exponents.
+    fn decode_exponents(absexp: u8, gexp: &[u8], expstr: u8, ncoefs: usize) -> [u8; 256] {
+        let ngrps = gexp.len();
+
+        // grpsize = 1 for D15, 2 for D25, 4 for D45
+        let grpsize: usize = match expstr {
+            1 => 1,
+            2 => 2,
+            3 => 4,
+            _ => unreachable!(),
+        };
+
+        // Unpack mapped values from 7-bit groups
+        let mut dexp = [0i32; 256 * 3];
+        for grp in 0..ngrps {
+            let expacc = gexp[grp] as i32;
+            dexp[grp * 3] = expacc / 25;
+            let rem = expacc % 25;
+            dexp[grp * 3 + 1] = rem / 5;
+            dexp[grp * 3 + 2] = rem % 5;
+        }
+
+        // Remove mapping bias (dexp = mapped_value - 2)
+        for d in dexp[..(ngrps * 3)].iter_mut() {
+            *d -= 2;
+        }
+
+        // Convert differentials to absolutes
+        //   aexp[i] = prevexp + dexp[i]
+        let mut aexp = [0i32; 256 * 3];
+        let mut prevexp = absexp as i32;
+        for (a, d) in aexp.iter_mut().zip(dexp.iter()).take(ngrps * 3) {
+            *a = prevexp + d;
+            prevexp = *a;
+        }
+
+        // Expand to full absolute exponent array using grpsize
+        // exp[0] = absexp
+        // exp[(i * grpsize) + j + 1] = aexp[i]
+        let mut exp = [0u8; 256];
+        exp[0] = absexp;
+        for (i, &a) in aexp[..(ngrps * 3)].iter().enumerate() {
+            for j in 0..grpsize {
+                let pos = i * grpsize + j + 1;
+                if pos < ncoefs {
+                    exp[pos] = a as u8;
+                }
+            }
+        }
+
+        exp
     }
 }

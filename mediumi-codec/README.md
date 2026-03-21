@@ -18,6 +18,8 @@ $ ffmpeg -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 \
     -c:v libx264 -f h264 test.h264
 $ ffmpeg -f lavfi -i sine=frequency=440:duration=3:sample_rate=44100 \
     -c:a aac -f adts test.aac
+$ ffmpeg -f lavfi -i sine=frequency=440:duration=3:sample_rate=44100 \
+    -c:a ac3 -f ac3 test.ac3
 ```
 
 ### Parse
