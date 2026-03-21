@@ -1,8 +1,10 @@
+//! Serialize/Deserialize AC-3 frame
+
 use crate::{
     ac3::{
         bap::{BapParams, compute_bap},
         error::Error,
-        mantissa::{MantissaParams, parse_mantissas},
+        mantissa::{MantissaParams, parse_mantissas, write_mantissas},
     },
     util::bitstream::{BitstreamReader, BitstreamWriter},
 };
@@ -132,12 +134,12 @@ impl AudioMode {
 /// Extended BSI fields after origbs, varying by bsid.
 #[derive(Debug)]
 pub enum BsiExtension {
-    /// bsid=6: Alternate BSI syntax (A/52 Annex D, Table D2.1)
+    /// bsid=6: Alternate BSI syntax
     AltBsi {
         xbsi1: Option<Xbsi1>,
         xbsi2: Option<Xbsi2>,
     },
-    /// bsid != 6: Standard BSI syntax (A/52 Table 5.2)
+    /// bsid != 6: Standard BSI syntax
     Standard {
         timecod1: Option<u16>, // 14 bits
         timecod2: Option<u16>, // 14 bits
@@ -344,6 +346,22 @@ pub struct QuantizedMantissaValues {
     pub chmant: Vec<Vec<i32>>,     // [ch][bin], nfchans channels
     pub cplmant: Option<Vec<i32>>, // coupling channel mantissas
     pub lfemant: Option<Vec<i32>>, // LFE channel mantissas
+    /// Pre-computed write actions for each bin position.
+    /// Recorded at parse time to enable 1-pass write matching parse-side bit layout.
+    pub write_actions: Vec<MantissaWriteAction>,
+}
+
+/// Write action for a single bin position in the mantissa bitstream.
+#[derive(Debug, Clone)]
+pub enum MantissaWriteAction {
+    /// No bits to write (bap=0)
+    None,
+    /// Write a group code at this position (first bin of a grouped quantizer)
+    WriteGroup { code: u32, bits: u8 },
+    /// Skip (non-first member of a group, already written at group's first bin)
+    Skip,
+    /// Write a single mantissa value
+    WriteSingle { code: u32, bits: u8 },
 }
 // ----------------------------------------------
 
@@ -415,6 +433,8 @@ impl AudblkDecodedState {
 #[derive(Debug)]
 pub struct AuxiliaryData {
     pub auxdata: Vec<u8>,
+    /// Number of valid bits in the last byte (1-8, or 8 if all full bytes).
+    pub last_byte_bits: u8,
 }
 
 #[derive(Debug)]
@@ -433,7 +453,7 @@ pub struct Ac3 {
 }
 
 impl Ac3 {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut writer = BitstreamWriter::new();
 
         // syncinfo
@@ -553,24 +573,42 @@ impl Ac3 {
             }
         }
 
-        // audio block
-        let abs = &self.ab;
-        for _ab in abs {
-            todo!()
+        // audio blocks
+        let nfchans = bsi.audio_mode.nfchans();
+        let mut prev = AudblkDecodedState::initial(nfchans);
+
+        for ab in &self.ab {
+            Self::write_audblk(&mut writer, nfchans, bsi.acmod, bsi.lfeon, ab, &mut prev)?;
         }
 
         // auxdata
-        for &b in &self.aux.auxdata {
-            writer.write_bits(b as u32, 8);
+        let aux = &self.aux;
+        if !aux.auxdata.is_empty() {
+            let full_bytes = if aux.last_byte_bits < 8 && aux.last_byte_bits > 0 {
+                aux.auxdata.len() - 1
+            } else {
+                aux.auxdata.len()
+            };
+            for &b in &aux.auxdata[..full_bytes] {
+                writer.write_bits(b as u32, 8);
+            }
+            if aux.last_byte_bits > 0 && aux.last_byte_bits < 8 {
+                let last = *aux
+                    .auxdata
+                    .last()
+                    .ok_or(Error::InvalidState("auxdata empty but last_byte_bits > 0"))?;
+                writer.write_bits(last as u32, aux.last_byte_bits);
+            }
         }
 
         // errorcheck
         writer.write_bool(self.ec.crcrsv);
         writer.write_bits(self.ec.crc2 as u32, 16);
 
-        writer.finish()
+        Ok(writer.finish())
     }
 
+    // Parse an AC-3 frame
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
 
@@ -614,7 +652,10 @@ impl Ac3 {
         let aux = if reader.remaining_bits() >= 17 {
             Self::parse_auxdata(&mut reader)?
         } else {
-            AuxiliaryData { auxdata: vec![] }
+            AuxiliaryData {
+                auxdata: vec![],
+                last_byte_bits: 0,
+            }
         };
         let ec = if reader.remaining_bits() >= 17 {
             Self::parse_errorcheck(&mut reader)?
@@ -634,6 +675,7 @@ impl Ac3 {
         })
     }
 
+    /// Parse a sync information
     fn parse_si(reader: &mut BitstreamReader<'_>) -> Result<SyncInfo, Error> {
         Ok(SyncInfo {
             syncword: reader.read_bits(16)? as u16,
@@ -643,6 +685,7 @@ impl Ac3 {
         })
     }
 
+    /// Parse a bit stream information
     fn parse_bsi(reader: &mut BitstreamReader<'_>) -> Result<BitStreamInformation, Error> {
         let bsid = reader.read_bits(5)? as u8;
         let bsmod = reader.read_bits(3)? as u8;
@@ -817,6 +860,7 @@ impl Ac3 {
         })
     }
 
+    /// Parse an audio block
     fn parse_audblk(
         reader: &mut BitstreamReader<'_>,
         nfchans: u8,
@@ -1353,7 +1397,7 @@ impl Ac3 {
 
         // Decode exponents: grouped -> per-bin
         // Full bandwidth channels
-        let mut ch_decoded_exps: Vec<[u8; 256]> = prev.ch_decoded_exps.clone();
+        let mut ch_decoded_exps = prev.ch_decoded_exps.clone();
         for ch in 0..nfchans as usize {
             if chexpstr[ch] != 0 {
                 let fb = fb_ch_exps.channels[ch]
@@ -1478,8 +1522,12 @@ impl Ac3 {
                 dbpbcod: eff_bai.dbpbcod,
                 floorcod: eff_bai.floorcod,
                 csnroffst: eff_snroffst.csnroffst,
-                fsnroffst: eff_snroffst.cplfsnroffst.unwrap_or(0),
-                fgaincod: eff_snroffst.cplfgaincod.unwrap_or(0),
+                fsnroffst: eff_snroffst
+                    .cplfsnroffst
+                    .ok_or(Error::InvalidState("cplfsnroffst missing"))?,
+                fgaincod: eff_snroffst
+                    .cplfgaincod
+                    .ok_or(Error::InvalidState("cplfgaincod missing"))?,
                 fscod,
             };
             let deltba_tuples = eff_deltba
@@ -1581,7 +1629,6 @@ impl Ac3 {
     }
 
     /// auxdata: variable-length data between the last audblk and errorcheck.
-    /// Length is determined by remaining bits minus 17 (errorcheck size).
     fn parse_auxdata(reader: &mut BitstreamReader<'_>) -> Result<AuxiliaryData, Error> {
         let remaining = reader.remaining_bits();
         let aux_bits = remaining.saturating_sub(17);
@@ -1595,7 +1642,17 @@ impl Ac3 {
         if aux_leftover_bits > 0 {
             auxdata.push(reader.read_bits(aux_leftover_bits as u8)? as u8);
         }
-        Ok(AuxiliaryData { auxdata })
+        let last_byte_bits = if aux_leftover_bits > 0 {
+            aux_leftover_bits as u8
+        } else if aux_full_bytes > 0 {
+            8
+        } else {
+            0
+        };
+        Ok(AuxiliaryData {
+            auxdata,
+            last_byte_bits,
+        })
     }
 
     /// errorcheck: crcrsv (1 bit) + crc2 (16 bits)
@@ -1604,6 +1661,292 @@ impl Ac3 {
             crcrsv: reader.read_bit()?,
             crc2: reader.read_bits(16)? as u16,
         })
+    }
+
+    /// Write an audio block to the bitstream.
+    fn write_audblk(
+        writer: &mut BitstreamWriter,
+        nfchans: u8,
+        acmod: u8,
+        lfeon: bool,
+        ab: &AudioBlock,
+        prev: &mut AudblkDecodedState,
+    ) -> Result<(), Error> {
+        // blksw, dithflag
+        for &b in &ab.blksw {
+            writer.write_bool(b);
+        }
+        for &b in &ab.dithflag {
+            writer.write_bool(b);
+        }
+
+        // dynrng
+        writer.write_bool(ab.dynrng.is_some());
+        if let Some(d) = ab.dynrng {
+            writer.write_bits(d as u32, 8);
+        }
+        // dynrng2 (dual mono only)
+        if acmod == 0 {
+            writer.write_bool(ab.dynrng2.is_some());
+            if let Some(d) = ab.dynrng2 {
+                writer.write_bits(d as u32, 8);
+            }
+        }
+
+        // coupling strategy
+        let mut cplinu = prev.cplinu;
+        let mut chincpl = prev.chincpl.clone();
+        let mut ncplbnd = prev.ncplbnd;
+        match &ab.cpl.strategy {
+            CplStrategy::Reuse => {
+                writer.write_bool(false); // cplstre=0
+            }
+            CplStrategy::NotInUse => {
+                writer.write_bool(true); // cplstre=1
+                writer.write_bool(false); // cplinu=0
+                cplinu = false;
+                chincpl = vec![false; nfchans as usize];
+                ncplbnd = 0;
+            }
+            CplStrategy::InUse {
+                chincpl: ci,
+                phsflginu,
+                cplbegf,
+                cplendf,
+                cplbndstrc,
+            } => {
+                writer.write_bool(true); // cplstre=1
+                writer.write_bool(true); // cplinu=1
+                cplinu = true;
+                chincpl = ci.clone();
+                for &b in ci {
+                    writer.write_bool(b);
+                }
+                if acmod == 0x2 {
+                    writer.write_bool(
+                        phsflginu.ok_or(Error::InvalidState("phsflginu must be set for stereo"))?,
+                    );
+                }
+                writer.write_bits(*cplbegf as u32, 4);
+                writer.write_bits(*cplendf as u32, 4);
+                for &b in cplbndstrc {
+                    writer.write_bool(b);
+                }
+                ncplbnd = 1 + cplbndstrc.iter().filter(|&&b| !b).count();
+            }
+        }
+
+        // coupling coordinates
+        if let Some(ref coord) = ab.cpl.coord {
+            for ch_coord in &coord.channels {
+                if let Some(cc) = ch_coord {
+                    writer.write_bool(true); // cplcoe=1
+                    writer.write_bits(cc.mstrcplco as u32, 2);
+                    for &(exp, mant) in &cc.bands {
+                        writer.write_bits(exp as u32, 4);
+                        writer.write_bits(mant as u32, 4);
+                    }
+                } else {
+                    writer.write_bool(false); // cplcoe=0
+                }
+            }
+            if let Some(ref flags) = coord.phsflg {
+                for &f in flags {
+                    writer.write_bool(f);
+                }
+            }
+        }
+
+        // rematrixing (2/0 mode only)
+        if acmod == 0x2 {
+            let has_remat = ab.rematrixing.rematflg.is_some();
+            writer.write_bool(has_remat);
+            if let Some(ref flags) = ab.rematrixing.rematflg {
+                for &f in flags {
+                    writer.write_bool(f);
+                }
+            }
+        }
+
+        // exponent strategy
+        let es = &ab.exponent_strategy;
+        if cplinu {
+            writer.write_bits(
+                es.cplexpstr
+                    .ok_or(Error::InvalidState("cplexpstr missing"))? as u32,
+                2,
+            );
+        }
+        for &s in &es.chexpstr {
+            writer.write_bits(s as u32, 2);
+        }
+        if lfeon {
+            writer.write_bool(
+                es.lfeexpstr
+                    .ok_or(Error::InvalidState("lfeexpstr missing"))?,
+            );
+        }
+
+        // channel bandwidth code
+        for (ch, (&expstr, &incpl)) in es.chexpstr.iter().zip(chincpl.iter()).enumerate() {
+            if expstr != 0 && !incpl {
+                writer.write_bits(
+                    es.chbwcod[ch].ok_or(Error::InvalidState("chbwcod missing"))? as u32,
+                    6,
+                );
+            }
+        }
+
+        // coupling channel exponents
+        if let Some(ref cpl_exp) = ab.cpl_ch_exps {
+            writer.write_bits(cpl_exp.cplabsexp as u32, 4);
+            for &e in &cpl_exp.cplexps {
+                writer.write_bits(e as u32, 7);
+            }
+        }
+
+        // full bandwidth channel exponents
+        for ch_exp in ab.fb_ch_exps.channels.iter().flatten() {
+            writer.write_bits(ch_exp.abs_exp as u32, 4);
+            for &e in &ch_exp.exps {
+                writer.write_bits(e as u32, 7);
+            }
+            writer.write_bits(ch_exp.gainrng as u32, 2);
+        }
+
+        // LFE exponents
+        if let Some(Some(lfe)) = &ab.lfe_ch_exps {
+            writer.write_bits(lfe.abs_exp as u32, 4);
+            for &e in &lfe.lfeexps {
+                writer.write_bits(e as u32, 7);
+            }
+        }
+
+        // Bit-allocation parametric information
+        let bapi = &ab.bapi;
+        writer.write_bool(bapi.bai.is_some());
+        if let Some(ref bai) = bapi.bai {
+            writer.write_bits(bai.sdcycod as u32, 2);
+            writer.write_bits(bai.fdcycod as u32, 2);
+            writer.write_bits(bai.sgaincod as u32, 2);
+            writer.write_bits(bai.dbpbcod as u32, 2);
+            writer.write_bits(bai.floorcod as u32, 3);
+        }
+
+        // SNR offset
+        writer.write_bool(bapi.snroffst.is_some());
+        if let Some(ref snr) = bapi.snroffst {
+            writer.write_bits(snr.csnroffst as u32, 6);
+            if cplinu {
+                writer.write_bits(
+                    snr.cplfsnroffst
+                        .ok_or(Error::InvalidState("cplfsnroffst missing"))?
+                        as u32,
+                    4,
+                );
+                writer.write_bits(
+                    snr.cplfgaincod
+                        .ok_or(Error::InvalidState("cplfgaincod missing"))?
+                        as u32,
+                    3,
+                );
+            }
+            for ch in 0..nfchans as usize {
+                writer.write_bits(snr.fsnroffst[ch] as u32, 4);
+                writer.write_bits(snr.fgaincod[ch] as u32, 3);
+            }
+            if lfeon {
+                writer.write_bits(
+                    snr.lfefsnroffst
+                        .ok_or(Error::InvalidState("lfefsnroffst missing"))?
+                        as u32,
+                    4,
+                );
+                writer.write_bits(
+                    snr.lfefgaincod
+                        .ok_or(Error::InvalidState("lfefgaincod missing"))?
+                        as u32,
+                    3,
+                );
+            }
+        }
+
+        // Coupling leak
+        if cplinu {
+            writer.write_bool(bapi.cplleak.is_some());
+            if let Some(ref cl) = bapi.cplleak {
+                writer.write_bits(cl.cplfleak as u32, 3);
+                writer.write_bits(cl.cplsleak as u32, 3);
+            }
+        }
+
+        // Delta bit allocation
+        writer.write_bool(ab.deltbai.is_some());
+        if let Some(ref dba) = ab.deltbai {
+            if cplinu {
+                writer.write_bits(
+                    dba.cpldeltbae
+                        .ok_or(Error::InvalidState("cpldeltbae missing"))?
+                        as u32,
+                    2,
+                );
+            }
+            for &d in &dba.deltbae {
+                writer.write_bits(d as u32, 2);
+            }
+            // coupling delta segments
+            if let Some(ref segs) = dba.cpldeltsegs {
+                writer.write_bits((segs.len() - 1) as u32, 3);
+                for s in segs {
+                    writer.write_bits(s.deltoffst as u32, 5);
+                    writer.write_bits(s.deltlen as u32, 4);
+                    writer.write_bits(s.deltba as u32, 3);
+                }
+            }
+            // per-channel delta segments
+            for segs in dba.deltsegs.iter().flatten() {
+                writer.write_bits((segs.len() - 1) as u32, 3);
+                for s in segs {
+                    writer.write_bits(s.deltoffst as u32, 5);
+                    writer.write_bits(s.deltlen as u32, 4);
+                    writer.write_bits(s.deltba as u32, 3);
+                }
+            }
+        }
+
+        // Unused dummy data (skip)
+        writer.write_bool(ab.unused_dummy.is_some());
+        if let Some(ref dummy) = ab.unused_dummy {
+            writer.write_bits(dummy.skipl as u32, 9);
+            for &b in &dummy.skipfld {
+                writer.write_bits(b as u32, 8);
+            }
+        }
+
+        let cplbegf = match &ab.cpl.strategy {
+            CplStrategy::InUse { cplbegf, .. } => Some(*cplbegf),
+            _ => prev.cplbegf,
+        };
+        let cplendf = match &ab.cpl.strategy {
+            CplStrategy::InUse { cplendf, .. } => Some(*cplendf),
+            _ => prev.cplendf,
+        };
+
+        // Mantissas
+        write_mantissas(writer, &ab.mantissas);
+
+        // Update prev state
+        prev.cplinu = cplinu;
+        prev.chincpl = chincpl;
+        prev.ncplbnd = ncplbnd;
+        prev.cplbegf = cplbegf;
+        prev.cplendf = cplendf;
+        for (ch, &expstr) in es.chexpstr.iter().enumerate().take(nfchans as usize) {
+            if expstr != 0 {
+                prev.chbwcod[ch] = es.chbwcod[ch];
+            }
+        }
+        Ok(())
     }
 
     /// Decode grouped differential exponents into per-bin absolute exponents.

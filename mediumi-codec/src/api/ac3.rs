@@ -1,3 +1,5 @@
+//! AC-3 codec processor for parsing and serializing streams.
+
 use crate::ac3::{
     error::Error,
     frame::{self, Ac3},
@@ -9,8 +11,13 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut buf = Vec::new();
+        for frame in &self.ac3_frames {
+            buf.extend_from_slice(&frame.to_bytes()?);
+        }
+
+        Ok(buf)
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, Error> {

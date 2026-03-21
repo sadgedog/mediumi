@@ -106,7 +106,7 @@ fn masktab(bin: usize) -> usize {
     MASKTAB[bin] as usize
 }
 
-/// logadd(a, b): log-domain addition (Section 7.2.2.3)
+/// logadd(a, b): log-domain addition
 fn logadd(a: i32, b: i32) -> i32 {
     let c = a - b;
     let address = ((c.abs() >> 1) as usize).min(255);
@@ -117,7 +117,7 @@ fn logadd(a: i32, b: i32) -> i32 {
     }
 }
 
-/// calc_lowcomp(a, b0, b1, bin) (Section 7.2.2.4)
+/// calc_lowcomp(a, b0, b1, bin)
 fn calc_lowcomp(a: i32, b0: i32, b1: i32, bin: usize) -> i32 {
     if bin < 7 {
         if b0 + 256 == b1 {
@@ -140,7 +140,7 @@ fn calc_lowcomp(a: i32, b0: i32, b1: i32, bin: usize) -> i32 {
     }
 }
 
-/// Bit allocation parameters from the bitstream (Section 7.2.2.1).
+/// Bit allocation parameters from the bitstream
 pub struct BapParams {
     pub sdcycod: u8,   // slow decay code
     pub fdcycod: u8,   // fast decay code
