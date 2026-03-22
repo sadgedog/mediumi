@@ -13,8 +13,8 @@ use crate::{
 
 #[derive(Debug)]
 pub enum NalData {
-    Sps(StartCode, u8, Sps),
-    Pps(StartCode, u8, Pps),
+    Sps(StartCode, u8, Box<Sps>),
+    Pps(StartCode, u8, Box<Pps>),
     Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
 }
 
@@ -69,13 +69,13 @@ impl Processor {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let sps = Sps::parse(&rbsp)?;
                     last_sps = Some(sps.clone());
-                    nal_units.push(NalData::Sps(sc, nri, sps));
+                    nal_units.push(NalData::Sps(sc, nri, Box::new(sps)));
                 }
                 NalUnitType::PPS => {
                     if let Some(ref sps) = last_sps {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                         let pps = Pps::parse(&rbsp, sps)?;
-                        nal_units.push(NalData::Pps(sc, nri, pps));
+                        nal_units.push(NalData::Pps(sc, nri, Box::new(pps)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }

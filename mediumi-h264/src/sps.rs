@@ -106,10 +106,82 @@ pub struct FrameCropping {
     pub bottom_offset: u32,
 }
 
-// TODO: parse
+#[derive(Debug, Clone)]
+pub struct HrdParameters {
+    pub cpb_cnt_minus1: u32,
+    pub bit_rate_scale: u8,
+    pub cpb_size_scale: u8,
+    pub bit_rate_value_minus1: Vec<u32>,
+    pub cpb_size_value_minus1: Vec<u32>,
+    pub cbr_flag: Vec<bool>,
+    pub initial_cpb_removal_delay_length_minus1: u8,
+    pub cpb_removal_delay_length_minus1: u8,
+    pub dpb_output_delay_length_minus1: u8,
+    pub time_offset_length: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct AspectRatioInfo {
+    pub aspect_ratio_idc: u8,
+    pub sar_width: Option<u16>, // present only if aspect_ratio_idc == 255 (Extended_SAR)
+    pub sar_height: Option<u16>, // present only if aspect_ratio_idc == 255 (Extended_SAR)
+}
+
+#[derive(Debug, Clone)]
+pub struct ColourDescription {
+    pub colour_primaries: u8,
+    pub transfer_characteristics: u8,
+    pub matrix_coefficients: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct VideoSignalType {
+    pub video_format: u8,
+    pub video_full_range_flag: bool,
+    pub colour_description: Option<ColourDescription>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChromaLocInfo {
+    pub chroma_sample_loc_type_top_field: u32,
+    pub chroma_sample_loc_type_bottom_field: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimingInfo {
+    pub num_units_in_tick: u32,
+    pub time_scale: u32,
+    pub fixed_frame_rate_flag: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BitstreamRestriction {
+    pub motion_vectors_over_pic_boundaries_flag: bool,
+    pub max_bytes_per_pic_denom: u32,
+    pub max_bits_per_mb_denom: u32,
+    pub log2_max_mv_length_horizontal: u32,
+    pub log2_max_mv_length_vertical: u32,
+    pub max_num_reorder_frames: u32,
+    pub max_dec_frame_buffering: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct VuiHrd {
+    pub nal_hrd_parameters: Option<HrdParameters>,
+    pub vcl_hrd_parameters: Option<HrdParameters>,
+    pub low_delay_hrd_flag: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct VuiParameters {
-    pub raw: (Vec<u8>, u8), // (remaining_data, bit_offset)
+    pub aspect_ratio_info: Option<AspectRatioInfo>,
+    pub overscan_appropriate_flag: Option<bool>,
+    pub video_signal_type: Option<VideoSignalType>,
+    pub chroma_loc_info: Option<ChromaLocInfo>,
+    pub timing_info: Option<TimingInfo>,
+    pub hrd: Option<VuiHrd>,
+    pub pic_struct_present_flag: bool,
+    pub bitstream_restriction: Option<BitstreamRestriction>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,23 +299,101 @@ impl Sps {
 
         if let Some(vui) = &self.vui {
             writer.write_bool(true);
-            writer.write_remaining_bytes(&vui.raw.0, vui.raw.1);
+
+            if let Some(ari) = &vui.aspect_ratio_info {
+                writer.write_bool(true);
+                writer.write_bits(ari.aspect_ratio_idc as u32, 8);
+                if ari.aspect_ratio_idc == 255
+                    && let (Some(w), Some(h)) = (ari.sar_width, ari.sar_height)
+                {
+                    writer.write_bits(w as u32, 16);
+                    writer.write_bits(h as u32, 16);
+                }
+            } else {
+                writer.write_bool(false);
+            }
+
+            if let Some(flag) = vui.overscan_appropriate_flag {
+                writer.write_bool(true);
+                writer.write_bool(flag);
+            } else {
+                writer.write_bool(false);
+            }
+
+            if let Some(vst) = &vui.video_signal_type {
+                writer.write_bool(true);
+                writer.write_bits(vst.video_format as u32, 3);
+                writer.write_bool(vst.video_full_range_flag);
+                if let Some(cd) = &vst.colour_description {
+                    writer.write_bool(true);
+                    writer.write_bits(cd.colour_primaries as u32, 8);
+                    writer.write_bits(cd.transfer_characteristics as u32, 8);
+                    writer.write_bits(cd.matrix_coefficients as u32, 8);
+                } else {
+                    writer.write_bool(false);
+                }
+            } else {
+                writer.write_bool(false);
+            }
+
+            if let Some(cli) = &vui.chroma_loc_info {
+                writer.write_bool(true);
+                writer.write_ue(cli.chroma_sample_loc_type_top_field);
+                writer.write_ue(cli.chroma_sample_loc_type_bottom_field);
+            } else {
+                writer.write_bool(false);
+            }
+
+            if let Some(ti) = &vui.timing_info {
+                writer.write_bool(true);
+                writer.write_bits(ti.num_units_in_tick, 32);
+                writer.write_bits(ti.time_scale, 32);
+                writer.write_bool(ti.fixed_frame_rate_flag);
+            } else {
+                writer.write_bool(false);
+            }
+
+            if let Some(hrd) = &vui.hrd {
+                if let Some(nal) = &hrd.nal_hrd_parameters {
+                    writer.write_bool(true);
+                    Self::write_hrd_params(&mut writer, nal);
+                } else {
+                    writer.write_bool(false);
+                }
+                if let Some(vcl) = &hrd.vcl_hrd_parameters {
+                    writer.write_bool(true);
+                    Self::write_hrd_params(&mut writer, vcl);
+                } else {
+                    writer.write_bool(false);
+                }
+                writer.write_bool(hrd.low_delay_hrd_flag);
+            } else {
+                writer.write_bool(false); // nal_hrd_parameters_present_flag
+                writer.write_bool(false); // vcl_hrd_parameters_present_flag
+            }
+
+            writer.write_bool(vui.pic_struct_present_flag);
+
+            if let Some(bsr) = &vui.bitstream_restriction {
+                writer.write_bool(true);
+                writer.write_bool(bsr.motion_vectors_over_pic_boundaries_flag);
+                writer.write_ue(bsr.max_bytes_per_pic_denom);
+                writer.write_ue(bsr.max_bits_per_mb_denom);
+                writer.write_ue(bsr.log2_max_mv_length_horizontal);
+                writer.write_ue(bsr.log2_max_mv_length_vertical);
+                writer.write_ue(bsr.max_num_reorder_frames);
+                writer.write_ue(bsr.max_dec_frame_buffering);
+            } else {
+                writer.write_bool(false);
+            }
+
+            writer.write_bits(1, 1); // rbsp_stop_one_bit
         } else {
             writer.write_bool(false);
             writer.write_bits(1, 1); // rbsp_stop_one_bit
         }
 
         writer.finish()
-    }
-
-    pub fn write_scaling_list(writer: &mut BitstreamWriter, list: &[u8]) {
-        let mut last_scale: i32 = 8;
-        for &scale in list {
-            let delta = (scale as i32 - last_scale + 256) % 256;
-            let delta = if delta > 128 { delta - 256 } else { delta };
-            writer.write_se(delta);
-            last_scale = scale as i32;
-        }
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
@@ -360,8 +510,118 @@ impl Sps {
 
         let vui_parameters_present_flag = reader.read_bit()?;
         let vui = if vui_parameters_present_flag {
+            let aspect_ratio_info = if reader.read_bit()? {
+                let idc = reader.read_bits(8)? as u8;
+                let (sar_width, sar_height) = if idc == 255 {
+                    (
+                        Some(reader.read_bits(16)? as u16),
+                        Some(reader.read_bits(16)? as u16),
+                    )
+                } else {
+                    (None, None)
+                };
+                Some(AspectRatioInfo {
+                    aspect_ratio_idc: idc,
+                    sar_width,
+                    sar_height,
+                })
+            } else {
+                None
+            };
+
+            let overscan_appropriate_flag = if reader.read_bit()? {
+                Some(reader.read_bit()?)
+            } else {
+                None
+            };
+
+            let video_signal_type = if reader.read_bit()? {
+                let video_format = reader.read_bits(3)? as u8;
+                let video_full_range_flag = reader.read_bit()?;
+                let colour_description = if reader.read_bit()? {
+                    Some(ColourDescription {
+                        colour_primaries: reader.read_bits(8)? as u8,
+                        transfer_characteristics: reader.read_bits(8)? as u8,
+                        matrix_coefficients: reader.read_bits(8)? as u8,
+                    })
+                } else {
+                    None
+                };
+                Some(VideoSignalType {
+                    video_format,
+                    video_full_range_flag,
+                    colour_description,
+                })
+            } else {
+                None
+            };
+
+            let chroma_loc_info = if reader.read_bit()? {
+                Some(ChromaLocInfo {
+                    chroma_sample_loc_type_top_field: reader.read_ue()?,
+                    chroma_sample_loc_type_bottom_field: reader.read_ue()?,
+                })
+            } else {
+                None
+            };
+
+            let timing_info = if reader.read_bit()? {
+                Some(TimingInfo {
+                    num_units_in_tick: reader.read_bits(32)?,
+                    time_scale: reader.read_bits(32)?,
+                    fixed_frame_rate_flag: reader.read_bit()?,
+                })
+            } else {
+                None
+            };
+
+            let nal_hrd_parameters = if reader.read_bit()? {
+                Some(Self::parse_hrd_params(&mut reader)?)
+            } else {
+                None
+            };
+
+            let vcl_hrd_parameters = if reader.read_bit()? {
+                Some(Self::parse_hrd_params(&mut reader)?)
+            } else {
+                None
+            };
+
+            let hrd = if nal_hrd_parameters.is_some() || vcl_hrd_parameters.is_some() {
+                Some(VuiHrd {
+                    nal_hrd_parameters,
+                    vcl_hrd_parameters,
+                    low_delay_hrd_flag: reader.read_bit()?,
+                })
+            } else {
+                None
+            };
+
+            let pic_struct_present_flag = reader.read_bit()?;
+
+            let bitstream_restriction = if reader.read_bit()? {
+                Some(BitstreamRestriction {
+                    motion_vectors_over_pic_boundaries_flag: reader.read_bit()?,
+                    max_bytes_per_pic_denom: reader.read_ue()?,
+                    max_bits_per_mb_denom: reader.read_ue()?,
+                    log2_max_mv_length_horizontal: reader.read_ue()?,
+                    log2_max_mv_length_vertical: reader.read_ue()?,
+                    max_num_reorder_frames: reader.read_ue()?,
+                    max_dec_frame_buffering: reader.read_ue()?,
+                })
+            } else {
+                None
+            };
+
             Some(VuiParameters {
-                raw: reader.read_remaining_bytes(),
+                aspect_ratio_info,
+                overscan_appropriate_flag,
+                video_signal_type,
+                chroma_loc_info,
+                timing_info,
+                hrd,
+                pic_struct_present_flag,
+                bitstream_restriction,
             })
         } else {
             None
@@ -394,6 +654,16 @@ impl Sps {
         )
     }
 
+    pub fn write_scaling_list(writer: &mut BitstreamWriter, list: &[u8]) {
+        let mut last_scale: i32 = 8;
+        for &scale in list {
+            let delta = (scale as i32 - last_scale + 256) % 256;
+            let delta = if delta > 128 { delta - 256 } else { delta };
+            writer.write_se(delta);
+            last_scale = scale as i32;
+        }
+    }
+
     pub fn parse_scaling_list<const N: usize>(
         reader: &mut BitstreamReader,
     ) -> Result<[u8; N], Error> {
@@ -415,6 +685,54 @@ impl Sps {
         }
 
         Ok(scaling_list)
+    }
+
+    fn write_hrd_params(writer: &mut BitstreamWriter, hrd: &HrdParameters) {
+        writer.write_ue(hrd.cpb_cnt_minus1);
+        writer.write_bits(hrd.bit_rate_scale as u32, 4);
+        writer.write_bits(hrd.cpb_size_scale as u32, 4);
+        for i in 0..=hrd.cpb_cnt_minus1 as usize {
+            writer.write_ue(hrd.bit_rate_value_minus1[i]);
+            writer.write_ue(hrd.cpb_size_value_minus1[i]);
+            writer.write_bool(hrd.cbr_flag[i]);
+        }
+        writer.write_bits(hrd.initial_cpb_removal_delay_length_minus1 as u32, 5);
+        writer.write_bits(hrd.cpb_removal_delay_length_minus1 as u32, 5);
+        writer.write_bits(hrd.dpb_output_delay_length_minus1 as u32, 5);
+        writer.write_bits(hrd.time_offset_length as u32, 5);
+    }
+
+    fn parse_hrd_params(reader: &mut BitstreamReader) -> Result<HrdParameters, Error> {
+        let cpb_cnt_minus1 = reader.read_ue()?;
+        let bit_rate_scale = reader.read_bits(4)? as u8;
+        let cpb_size_scale = reader.read_bits(4)? as u8;
+
+        let mut bit_rate_value_minus1 = Vec::with_capacity(cpb_cnt_minus1 as usize + 1);
+        let mut cpb_size_value_minus1 = Vec::with_capacity(cpb_cnt_minus1 as usize + 1);
+        let mut cbr_flag = Vec::with_capacity(cpb_cnt_minus1 as usize + 1);
+        for _ in 0..=cpb_cnt_minus1 {
+            bit_rate_value_minus1.push(reader.read_ue()?);
+            cpb_size_value_minus1.push(reader.read_ue()?);
+            cbr_flag.push(reader.read_bit()?);
+        }
+
+        let initial_cpb_removal_delay_length_minus1 = reader.read_bits(5)? as u8;
+        let cpb_removal_delay_length_minus1 = reader.read_bits(5)? as u8;
+        let dpb_output_delay_length_minus1 = reader.read_bits(5)? as u8;
+        let time_offset_length = reader.read_bits(5)? as u8;
+
+        Ok(HrdParameters {
+            cpb_cnt_minus1,
+            bit_rate_scale,
+            cpb_size_scale,
+            bit_rate_value_minus1,
+            cpb_size_value_minus1,
+            cbr_flag,
+            initial_cpb_removal_delay_length_minus1,
+            cpb_removal_delay_length_minus1,
+            dpb_output_delay_length_minus1,
+            time_offset_length,
+        })
     }
 
     /// Width
