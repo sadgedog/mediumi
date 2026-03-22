@@ -29,5 +29,4 @@ $ cargo run --example h264_roundtrip
 
 ## Out of scope
 - Specific NAL Unit Type (AUD, SEI, ...)
-- VUI parsing
     - These may be supported in the future.
