@@ -7,7 +7,7 @@ fn main() {
     ))
     .expect("failed to read input ts file");
 
-    let result = api::pes_decoder::decode(&input).expect("failed to decode");
+    let result = api::pes_demuxer::demux(&input).expect("failed to demux");
 
     println!("PAT: {:?}", result.pat);
     println!("PMT: {:?}\n", result.pmt);

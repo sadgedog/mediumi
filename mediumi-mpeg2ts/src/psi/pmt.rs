@@ -3,6 +3,7 @@
 //! PMT is the payload when ts pid = pid of pat
 //!
 //! PMT construction
+//! ```text
 //! ┌─────────────────────────────────────┐
 //! │  table_id (1 byte)                  │ <- Fixed at 0x02
 //! │  section_syntax_indicator (1 bit)   │ <- Fixed at 1
@@ -23,15 +24,19 @@
 //! │  streams (variable)                 │ <- See below
 //! │  crc32 (32 bits)                    │ <- CRC32 over entire section
 //! └─────────────────────────────────────┘
+//! ```
 //!
 //! Descriptor
+//! ```text
 //! ┌─────────────────────────────────────┐
 //! │  descriptor_tag (1 byte)            │ <- Indentifier of descriptor type
 //! │  descriptor_length (1 byte)         │ <- Length of descriptor
 //! │  descriptor_data (N * 1 byte)       │ <- Descriptor data
 //! └─────────────────────────────────────┘
+//! ```
 //!
 //! Stream
+//! ```text
 //! ┌─────────────────────────────────────┐
 //! │  stream_type (1 byte)               │ <- Codec type(H.264, AAC, ...)
 //! │  reserved (3 bit)                   │ <- Fixed at 0b111
@@ -40,6 +45,7 @@
 //! │  es_info_length (12 bits)           │ <- Length of descriptor
 //! │  descriptor (12 bits)               │ <- descriptor (same as above descriptor)
 //! └─────────────────────────────────────┘
+//! ```
 //!
 
 use crate::psi::{crc32, error::Error};

@@ -1,4 +1,4 @@
-use mediumi_aac::api::Processor;
+use mediumi_aac::Processor;
 
 fn main() {
     let input = std::fs::read(concat!(

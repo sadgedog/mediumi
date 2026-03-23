@@ -1,38 +1,38 @@
-//! Encode decoded data (PES packets) back into TS byte stream.
+//! Mux demuxed data (PES packets) back into TS byte stream.
 //!
-//! Reconstructs 188-byte TS packets from decoded PAT, PMT, and PES streams.
+//! Reconstructs 188-byte TS packets from demuxed PAT, PMT, and PES streams.
 //!
-//! Note: This encoder does not preserve the original TS packet interleaving.
+//! Note: This muxer does not preserve the original TS packet interleaving.
 //! Each PES is written as consecutive TS packets, which changes the packet
 //! ordering compared to the original stream where audio/video packets are interleaved.
 //! PAT/PMT are also deduplicated to a single instance.
 
 use crate::api::{
     error::Error,
-    pes_decoder::{Decoded, Stream},
+    pes_demuxer::{Demuxed, Stream},
 };
 
-/// Encode Decoded data back to TS byte stream
-pub fn encode(decoded: &Decoded) -> Result<Vec<u8>, Error> {
+/// Mux demuxed data back to TS byte stream
+pub fn mux(demuxed: &Demuxed) -> Result<Vec<u8>, Error> {
     let mut output = Vec::new();
 
     // PAT
-    encode_section(&decoded.pat.to_bytes(), 0x0000, &mut output);
+    mux_section(&demuxed.pat.to_bytes(), 0x0000, &mut output);
 
     // PMT
-    let pmt_pid = decoded.pat.programs[0].pid;
-    encode_section(&decoded.pmt.to_bytes(), pmt_pid, &mut output);
+    let pmt_pid = demuxed.pat.programs[0].pid;
+    mux_section(&demuxed.pmt.to_bytes(), pmt_pid, &mut output);
 
     // PES streams (fragments reuse mode)
-    for stream in &decoded.streams {
-        encode_stream(stream, &mut output)?;
+    for stream in &demuxed.streams {
+        mux_stream(stream, &mut output)?;
     }
 
     Ok(output)
 }
 
-/// Encode PSI section (PAT/PMT) into TS packets
-fn encode_section(section: &[u8], pid: u16, output: &mut Vec<u8>) {
+/// Mux PSI section (PAT/PMT) into TS packets
+fn mux_section(section: &[u8], pid: u16, output: &mut Vec<u8>) {
     let mut packet = [0xFF; 188];
 
     // Sync byte
@@ -50,8 +50,8 @@ fn encode_section(section: &[u8], pid: u16, output: &mut Vec<u8>) {
     output.extend_from_slice(&packet);
 }
 
-/// Encode PES stream using original TS fragment metadata
-fn encode_stream(stream: &Stream, output: &mut Vec<u8>) -> Result<(), Error> {
+/// Mux PES stream using original TS fragment metadata
+fn mux_stream(stream: &Stream, output: &mut Vec<u8>) -> Result<(), Error> {
     let pes_header_bytes = stream.pes.pes_header.to_bytes();
     let pes_bytes: Vec<u8> = [&pes_header_bytes[..], &stream.pes.pes_payload[..]].concat();
 

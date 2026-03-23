@@ -1,4 +1,4 @@
-use mediumi_h264::api::{NalData, Processor};
+use mediumi_h264::{NalData, Processor};
 
 fn main() {
     let input = std::fs::read(concat!(

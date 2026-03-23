@@ -3,6 +3,7 @@
 //! PAT is the payload when ts pid = 0x0000
 //!
 //! PAT construction
+//! ```text
 //! ┌─────────────────────────────────────┐
 //! │  table_id (1 byte)                  │ <- Fixed at 0x00
 //! │  section_syntax_indicator (1 bit)   │ <- Fixed at 1
@@ -18,8 +19,10 @@
 //! │  programs                           │ <- See below
 //! │  crc32 (32 bits)                    │ <- CRC32 over entire section
 //! └─────────────────────────────────────┘
+//! ```
 //!
 //! Programs
+//! ```text
 //! ┌─────────────────────────────────────┐
 //! │  program_number (2 bytes)           │ <- 0: network PID, otherwise: PMT PID follows
 //! │  reserved (3 bits)                  │ <- Fixed at 0b111
@@ -32,6 +35,7 @@
 //! if program_number != 0
 //! │  program_map_pid (13 bits)          │ <- PID of PMT for this program
 //! └─────────────────────────────────────┘
+//! ```
 //!
 
 use crate::psi::{crc32, error::Error};

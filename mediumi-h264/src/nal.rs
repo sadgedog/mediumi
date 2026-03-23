@@ -1,18 +1,22 @@
 //! NAL Unit Parser
 //!
 //! NAL Unit construction
+//! ```text
 //! ┌───────────────────────────┐
 //! │  NAL Unit Header(1 byte)  │
 //! ├───────────────────────────┤
 //! │  RBSP (variable)          │
 //! └───────────────────────────┘
+//! ```
 //!
 //! Nal Unit Header construction
+//! ```text
 //! ┌──────────────────────────────┐
 //! │  forbidden_zero_bit (1 bit)  │ <- Must be 0
 //! │  nal_ref_idc (2 bits)        │ <- Reference priority (0: disposable, 1..3: higher)
 //! │  nal_unit_type (5 bits)      │ <- NAL unit type (e.g. 1: Non-IDR, 5: IDR, 7: SPS, 8: PPS)
 //! └──────────────────────────────┘
+//! ```
 
 use crate::error::Error;
 

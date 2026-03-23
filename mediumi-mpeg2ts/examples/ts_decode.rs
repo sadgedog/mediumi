@@ -7,7 +7,7 @@ fn main() {
     ))
     .expect("failed to read input ts file");
 
-    let result = api::ts_decoder::decode(&input).expect("failed to decode");
+    let result = api::ts_demuxer::demux(&input).expect("failed to demux");
 
     for (i, packet) in result.packets.iter().enumerate() {
         println!("{} Stream {} {}", "=".repeat(40), i, "=".repeat(40));

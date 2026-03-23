@@ -1,13 +1,13 @@
-//! Parse raw TS byte stream into individual TS packet structs.
+//! Demux raw TS byte stream into individual TS packet structs.
 
 use crate::{api::error::Error, ts, ts::packet::Packet};
 
 #[derive(Debug)]
-pub struct Decoded {
+pub struct Demuxed {
     pub packets: Vec<Packet>,
 }
 
-pub fn decode(data: &[u8]) -> Result<Decoded, Error> {
+pub fn demux(data: &[u8]) -> Result<Demuxed, Error> {
     if !data.len().is_multiple_of(188) {
         return Err(Error::InvalidPacketsLength(data.len()));
     }
@@ -21,5 +21,5 @@ pub fn decode(data: &[u8]) -> Result<Decoded, Error> {
         packets.push(ts_packet);
     }
 
-    Ok(Decoded { packets })
+    Ok(Demuxed { packets })
 }

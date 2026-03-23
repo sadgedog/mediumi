@@ -1,4 +1,4 @@
-//! Serialize/Deserialize AC-3 frame
+//! Parse/Serialize AC-3 frame
 
 use crate::{
     bap::{BapParams, compute_bap},
