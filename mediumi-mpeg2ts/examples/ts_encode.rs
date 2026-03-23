@@ -25,8 +25,8 @@ fn main() {
     ))
     .expect("failed to read input ts file");
 
-    let decoded = api::ts_decoder::decode(&input).expect("failed to decode");
-    let output = api::ts_encoder::encode(&decoded).expect("failed to encode");
+    let demuxed = api::ts_demuxer::demux(&input).expect("failed to demux");
+    let output = api::ts_muxer::mux(&demuxed).expect("failed to mux");
 
     let output_path = concat!(env!("CARGO_MANIFEST_DIR"), "/examples/data/ts_output.ts");
     fs::write(output_path, &output).expect("failed to write encoded result");

@@ -1,13 +1,16 @@
 //! ADTS (Audio Data Transport Stream) parser
 //!
 //! ADTS Frame construction
+//! ```text
 //! ┌───────────────────────────────────────────────┐
 //! │  ADTS Header (7 bytes, or 9 bytes with CRC)   │
 //! ├───────────────────────────────────────────────┤
 //! │  Raw AAC Frame (variable)                     │
 //! └───────────────────────────────────────────────┘
+//! ```
 //!
 //! ADTS Header construction
+//! ```text
 //! ┌───────────────────────────────────────────────┐
 //! │  syncword (12 bits)                           │ <- Fixed at 0xFFF
 //! │  ID (1 bit)                                   │ <- 0: MPEG-4, 1: MPEG-2
@@ -27,6 +30,7 @@
 //! ├───────────────────────────────────────────────┤
 //! │  CRC (16 bits, optional)                      │ <- Present if protection_absent == 0
 //! └───────────────────────────────────────────────┘
+//! ```
 
 use crate::error::Error;
 

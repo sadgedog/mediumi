@@ -1,4 +1,4 @@
-use mediumi_h264::api::Processor;
+use mediumi_h264::Processor;
 
 fn main() {
     let input = std::fs::read(concat!(

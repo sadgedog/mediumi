@@ -3,6 +3,7 @@
 //! RBSP data when nal_unit_type = 7 (SPS)
 //! All fields below profile/level are encoded using Exp-Golomb coding
 //!
+//! ```text
 //! SPS construction
 //! ┌───────────────────────────────────────────────────────┐
 //! │  profile_idc (8 bits)                                 │ <- Profile (e.g. 66: Baseline, 77: Main,100: High)
@@ -63,8 +64,9 @@
 //! │  frame_crop_bottom_offset: ue(v)                      │
 //! ├───────────────────────────────────────────────────────┤
 //! │  vui_parameters_present_flag (1 bit)                  │ <- If 1, followed by VUI parameters
-//! │  vui_parameters (variable)                            │ <- Currently stored as raw bytes
+//! │  vui_parameters (variable)                            │
 //! └───────────────────────────────────────────────────────┘
+//! ```
 
 use crate::{
     error::Error,

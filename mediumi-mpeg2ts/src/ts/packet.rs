@@ -2,6 +2,7 @@
 //!
 //! TS packet construction
 //! Size of a TS packet is fixed at 188 bytes
+//! ```text
 //! ┌──────────────────────────────────────┐
 //! │  Header(4 bytes)                     │
 //! ├──────────────────────────────────────┤
@@ -9,8 +10,10 @@
 //! ├──────────────────────────────────────┤
 //! │  Payload (variable length)           │
 //! └──────────────────────────────────────┘
+//! ```
 //!
 //! Header
+//! ```text
 //! ┌─────────────────────────────────────────┐
 //! │  sync_byte (1 byte)                     │ <- Fixed at 0x47
 //! │  transport_error_indicator (1 bit)      │ <- Must be 0. if 1, this packet may contain error.
@@ -21,14 +24,16 @@
 //! │  adaptation_field_control (2 bits)      │ <- 00: reserved, 01: only payload, 10: only AF, 11: AF + payload
 //! │  continuity_counter (4 bits)            │ <- Increments 0..15, wraps around
 //! └─────────────────────────────────────────┘
+//! ```
 //!
 //! Adaptation Field
 //! If AFC is 10 or 11, this field is present after Header.
+//! ```text
 //! ┌────────────────────────────────────────────────────────┐
 //! │  adaptation_field_length (1 byte)                      │ <- Length of this field (not include itself)
 //! ├────────────────────────────────────────────────────────┤
 //!
-//! If adaptation_field_length > 0:  
+//! If adaptation_field_length > 0:
 //! ┌────────────────────────────────────────────────────────┐
 //! │  discontinuity_indicator (1 bit)                       │ <- If 1, this TS packet doesn't guarantee continuity
 //! │  random_access_indicator (1 bit)                       │ <- If 1, this packet is a random access point (mostly, decoder can start from here,typically contains I-frame)
@@ -105,7 +110,7 @@
 //! ┌─────────────────────────────┐
 //! │  payload (variable length)  │
 //! └─────────────────────────────┘
-//!
+//! ```
 
 use crate::ts::error::Error;
 

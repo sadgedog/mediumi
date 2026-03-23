@@ -1,14 +1,17 @@
 //! PES header parser
 //!
 //! PES header construction
+//! ```text
 //! ┌─────────────────────────────────────────────────┐
 //! │  packet_start_code_prefix (3 bytes)             │ <- Fixed at 0x00_00_01
 //! │  stream_id (1 byte)                             │ <- Indicate the kind of elemental stream
 //! │  PES_packet_length (2 bytes)                    │ <- Byte count after this field
 //! │  extension (variable)                           │ <- Extension
 //! └─────────────────────────────────────────────────┘
+//! ```
 //!
 //! Extension (Standard)
+//! ```text
 //! ┌─────────────────────────────────────────────────┐
 //! │  '10' (2 bits)                                  │ <- Fixed at 0b10
 //! │  PES_scrambling_control (2 bits)                │ <- Indicate that this PES is scrambling or not
@@ -126,12 +129,15 @@
 //!
 //! │  stuffing_byte (variable)                       │ <- 0xFF padding to fill PES_header_data_length
 //! └─────────────────────────────────────────────────┘
+//! ```
 //!
 //!
 //! Extension (DataOnly, Padding)
+//! ```text
 //! ┌─────────────────────────────────────────────────┐
 //! │  PES_packet_data_byte/padding_byte (variable)   │ <- PES payload of this packet (it doesn't be parsed here)
 //! └─────────────────────────────────────────────────┘
+//! ```
 //!
 
 use crate::pes::error::Error;

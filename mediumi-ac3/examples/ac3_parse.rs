@@ -1,4 +1,4 @@
-use mediumi_ac3::api::Processor;
+use mediumi_ac3::Processor;
 use mediumi_ac3::frame::CplStrategy;
 
 fn main() {

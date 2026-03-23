@@ -1,11 +1,13 @@
 //! Annex.B format parser
 //!
 //! Annex.B format construction
+//! ```text
 //! ┌───────────────────────────────────────────┐
 //! │  Start Code(0x00_00_00 or 0x00_00_00_01)  │
 //! ├───────────────────────────────────────────┤
 //! │  NAL Unit (variable)                      │
 //! └───────────────────────────────────────────┘
+//! ```
 
 use crate::{error::Error, nal::NalUnit};
 

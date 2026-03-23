@@ -1,4 +1,4 @@
-use mediumi_ac3::api::Processor;
+use mediumi_ac3::Processor;
 
 fn main() {
     let input = std::fs::read(concat!(

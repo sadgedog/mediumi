@@ -1,4 +1,4 @@
-//! Decode TS packets into PAT, PMT and PES streams
+//! Demux TS packets into PAT, PMT and PES streams.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -23,7 +23,7 @@ pub struct Stream {
 }
 
 #[derive(Debug)]
-pub struct Decoded {
+pub struct Demuxed {
     pub pat: Pat,
     pub pmt: Pmt,
     pub streams: Vec<Stream>,
@@ -95,8 +95,8 @@ impl Assembler {
     }
 }
 
-/// Decode TS packets
-pub fn decode(data: &[u8]) -> Result<Decoded, Error> {
+/// Demux TS packets
+pub fn demux(data: &[u8]) -> Result<Demuxed, Error> {
     if !data.len().is_multiple_of(188) {
         return Err(Error::InvalidPacketsLength(data.len()));
     }
@@ -152,7 +152,7 @@ pub fn decode(data: &[u8]) -> Result<Decoded, Error> {
         }
     }
 
-    Ok(Decoded {
+    Ok(Demuxed {
         pat: pat.ok_or(Error::PatNotFound)?,
         pmt: pmt.ok_or(Error::PmtNotFound)?,
         streams,

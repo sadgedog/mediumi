@@ -4,6 +4,7 @@
 //! All fields below profile/level are encoded using Exp-Golomb coding
 //!
 //! PPS construction
+//! ```text
 //! ┌───────────────────────────────────────────────────────┐
 //! │  pic_parameter_set_id: ue(v)                          │
 //! │  seq_parameter_set_id: ue(v)                          │
@@ -61,6 +62,7 @@
 //! │  scaling_list (variable)                              │
 //! │  second_chroma_qp_index_offset: se(v)                 │
 //! └───────────────────────────────────────────────────────┘
+//! ```
 
 use crate::{
     util::bitstream::{BitstreamReader, BitstreamWriter},
