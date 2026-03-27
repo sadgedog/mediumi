@@ -1,10 +1,18 @@
 [package]
 name = "mediumi"
 version = "0.1.0"
-edition = "2024"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Multimedia toolkit"
+readme = "README.md"
+repository.workspace = true
+license.workspace = true
+keywords = ["multimedia", "codec", "container", "video", "audio"]
+categories = ["multimedia", "multimedia::video", "multimedia::audio"]
 
 [dependencies]
-mediumi-aac = { path = "../mediumi-aac" }
-mediumi-ac3 = { path = "../mediumi-ac3" }
-mediumi-h264 = { path = "../mediumi-h264" }
-mediumi-mpeg2ts = { path = "../mediumi-mpeg2ts" }
+mediumi-aac = { path = "../mediumi-aac", version = "0.1.0" }
+mediumi-ac3 = { path = "../mediumi-ac3", version = "0.1.0" }
+mediumi-h264 = { path = "../mediumi-h264", version = "0.1.0" }
+mediumi-mpeg2ts = { path = "../mediumi-mpeg2ts", version = "0.1.0" }

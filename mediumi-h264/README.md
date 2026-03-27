@@ -1,7 +1,7 @@
 # mediumi-h264: H.264 toolkit
 
 ## About this
-mediumi-h264 is a H.264 parser and serializer.
+mediumi-h264 is an H.264 parser and serializer.
 
 ## Build
 ```sh
@@ -30,3 +30,6 @@ $ cargo run --example h264_roundtrip
 ## Out of scope
 - Specific NAL Unit Type (AUD, SEI, ...)
     - These may be supported in the future.
+
+## Status
+This project is under active development. APIs may change without notice.

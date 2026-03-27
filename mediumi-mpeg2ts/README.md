@@ -1,7 +1,7 @@
-# mediumi-mpeg2ts: A MPEG2-TS toolkit
+# mediumi-mpeg2ts: An MPEG2-TS toolkit
 
 ## About this
-mediumi-mpeg2ts is a MPEG2-TS encoder and decoder.
+mediumi-mpeg2ts is an MPEG2-TS encoder and decoder.
 
 ## Build
 ```sh
@@ -42,5 +42,8 @@ $ cargo run --example pes_encode
 ```
 
 ## Out of scope
-- Specific PSI (CAT, TSDT) and SI(NIT, SDT, BAT, TDT, TOT, RST).
+- Specific PSI (CAT, TSDT) and SI (NIT, SDT, BAT, TDT, TOT, RST).
     - These may be supported in the future.
+
+## Status
+This project is under active development. APIs may change without notice.

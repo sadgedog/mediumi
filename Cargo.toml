@@ -8,4 +8,9 @@ members = [
 ]
 resolver = "2"
 
-[workspace.dependencies]
+[workspace.package]
+authors = ["sadgedog"]
+edition = "2024"
+rust-version = "1.93.0"
+repository = "https://github.com/sadgedog/mediumi"
+license = "MIT"

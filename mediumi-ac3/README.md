@@ -25,3 +25,6 @@ $ cargo run --example ac3_parse
 ```sh
 $ cargo run --example ac3_roundtrip
 ```
+
+## Status
+This project is under active development. APIs may change without notice.

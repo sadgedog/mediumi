@@ -1,4 +1,12 @@
 [package]
 name = "mediumi-h264"
 version = "0.1.0"
-edition = "2024"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "H.264 codec parser and serializer"
+readme = "README.md"
+repository.workspace = true
+license = "MIT"
+keywords = ["codec", "video"]
+categories = ["multimedia", "multimedia::video"]
