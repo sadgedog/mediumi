@@ -1004,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode() {
+    fn test_mux() {
         #[rustfmt::skip]
         let data = vec![
             0x00, 0x00, 0x01, // start_code

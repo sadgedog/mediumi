@@ -1,7 +1,7 @@
 # mediumi-mpeg2ts: An MPEG2-TS toolkit
 
 ## About this
-mediumi-mpeg2ts is an MPEG2-TS encoder and decoder.
+mediumi-mpeg2ts is an MPEG2-TS demuxer and muxer.
 
 ## Build
 ```sh
@@ -21,24 +21,24 @@ $ ffmpeg -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 \
     -f mpegts test.ts
 ```
 
-### Decoder
-- Decode TS packets into individual TS packet struct.
+### Demux
+- Demux TS packets into individual TS packet struct.
 ```sh
-$ cargo run --example ts_decode
+$ cargo run --example ts_demux
 ```
-- Decode into PES streams.
+- Demux into PES streams.
 ```sh
-$ cargo run --example pes_decode
+$ cargo run --example pes_demux
 ```
 
-### Encoder
-- Decode and re-encode at TS packet level (lossless round-trip).
+### Mux
+- Demux and mux at TS packet level (lossless round-trip).
 ```sh
-$ cargo run --example ts_encode
+$ cargo run --example ts_mux
 ```
-- Decode and re-encode at PES level (does not preserve interleaving).
+- Demux and mux at PES level (does not preserve interleaving).
 ```sh
-$ cargo run --example pes_encode
+$ cargo run --example pes_mux
 ```
 
 ## Out of scope

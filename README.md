@@ -5,9 +5,9 @@ mediumi is a media toolkit written from scratch in Rust.
 It provides the following features.
 
 ### Features
-- Media container encoders and decoders for the following containers
+- Media container demuxer and muxer for the following containers
     - MPEG2-TS
-- Serializers and deserializers for the following codecs
+- Parser and Serializers and for the following codecs
     - AAC (ADTS)
     - AC-3 (A/52)
     - H.264 (AVC)
@@ -20,7 +20,7 @@ It provides the following features.
 - mediumi-h264
     - H.264 (AVC) bitstream parser and serializer
 - mediumi-mpeg2ts
-    - MPEG2-TS container encoder and decoder
+    - MPEG2-TS container demuxer and muxer
 
 ## Build
 ```sh

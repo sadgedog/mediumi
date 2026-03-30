@@ -533,7 +533,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_pmt() {
+    fn test_mux_pmt() {
         let data = build_pmt_data();
         let pmt = Pmt::parse(&data).unwrap();
 
