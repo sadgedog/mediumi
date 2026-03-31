@@ -655,7 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_payload_only() {
+    fn test_mux_payload_only() {
         let mut packet = vec![0xAB; 188];
         packet[0] = 0x47;
         packet[1] = 0b0100_0000; // PUSI=1
@@ -672,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_with_af_and_payload() {
+    fn test_mux_with_af_and_payload() {
         let mut packet = vec![0xFF; 188];
         packet[0] = 0x47;
         packet[1] = 0b0110_0000; // TEI=0, PUSI=1, TP=1

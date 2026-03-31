@@ -295,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_pat() {
+    fn test_mux_pat() {
         let pat = Pat::parse(&PAT_DATA).unwrap();
 
         let reconstructed = pat.to_bytes();
