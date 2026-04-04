@@ -17,7 +17,9 @@ pub mod annex_b;
 pub mod aud;
 pub mod error;
 pub mod nal;
+pub mod non_idr;
 pub mod pps;
+pub mod slice_header;
 pub mod sps;
 pub mod util;
 
