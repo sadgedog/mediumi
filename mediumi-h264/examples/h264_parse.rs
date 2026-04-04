@@ -29,6 +29,12 @@ fn main() {
                     i, sc, nri, pps
                 );
             }
+            NalData::Aud(sc, nri, aud) => {
+                println!(
+                    "[{}] Type: AUD, StartCode: {:?}, NRI: {}, AUD: {:?}",
+                    i, sc, nri, aud
+                );
+            }
             NalData::Raw(_, nri, nal_type, rbsp) => {
                 println!(
                     "[{}] Type: {:?}, NRI: {}, RBSP size: {} bytes",

@@ -8,6 +8,7 @@ pub enum Error {
     InvalidSliceGroupMapType(u32),
     MissingHighProfileData,
     InvalidNalUnitType(u8),
+    InvalidPrimaryPicType(u8),
 }
 
 impl std::fmt::Display for Error {
@@ -46,6 +47,7 @@ impl std::fmt::Display for Error {
             Error::InvalidNalUnitType(val) => {
                 write!(f, "Invalid NAL unit type: {}", val)
             }
+            Error::InvalidPrimaryPicType(val) => write!(f, "Invalid Primary Pic Type: {}", val),
         }
     }
 }

@@ -14,6 +14,7 @@
 //! ```
 
 pub mod annex_b;
+pub mod aud;
 pub mod error;
 pub mod nal;
 pub mod pps;
@@ -22,6 +23,7 @@ pub mod util;
 
 use crate::{
     annex_b::{StartCode, parse_all},
+    aud::Aud,
     error::Error,
     nal::{NalUnit, NalUnitType},
     pps::Pps,
@@ -32,6 +34,7 @@ use crate::{
 pub enum NalData {
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
+    Aud(StartCode, u8, Aud),
     Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
 }
 
@@ -58,6 +61,13 @@ impl Processor {
                     buf.push(nri << 5 | u8::from(&NalUnitType::PPS));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &pps.to_bytes(),
+                    ));
+                }
+                NalData::Aud(sc, nri, aud) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::AUD));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &aud.to_bytes(),
                     ));
                 }
                 NalData::Raw(sc, nri, nal_type, rbsp) => {
@@ -96,6 +106,11 @@ impl Processor {
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
+                }
+                NalUnitType::AUD => {
+                    let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                    let aud = Aud::parse(&rbsp)?;
+                    nal_units.push(NalData::Aud(sc, nri, aud));
                 }
                 NalUnitType::Unknown(v) => {
                     return Err(Error::InvalidNalUnitType(v));
