@@ -41,6 +41,12 @@ fn main() {
                     i, sc, nri, non_idr.slice_header
                 );
             }
+            NalData::EOSeq(sc, nri) => {
+                println!("[{}] Type: EOSeq, StartCode: {:?}, NRI: {}", i, sc, nri);
+            }
+            NalData::EOStream(sc, nri) => {
+                println!("[{}] Type: EOStream, StartCode: {:?}, NRI: {}", i, sc, nri);
+            }
             NalData::Raw(_, nri, nal_type, rbsp) => {
                 println!(
                     "[{}] Type: {:?}, NRI: {}, RBSP size: {} bytes",

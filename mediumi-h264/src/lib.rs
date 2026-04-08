@@ -39,6 +39,8 @@ pub enum NalData {
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
     Aud(StartCode, u8, Aud),
+    EOSeq(StartCode, u8),
+    EOStream(StartCode, u8),
     Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
 }
 
@@ -73,6 +75,14 @@ impl Processor {
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &aud.to_bytes(),
                     ));
+                }
+                NalData::EOSeq(sc, nri) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::EOSeq));
+                }
+                NalData::EOStream(sc, nri) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::EOStream));
                 }
                 NalData::Raw(sc, nri, nal_type, rbsp) => {
                     buf.extend_from_slice(sc.as_bytes());
@@ -127,6 +137,12 @@ impl Processor {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let aud = Aud::parse(&rbsp)?;
                     nal_units.push(NalData::Aud(sc, nri, aud));
+                }
+                NalUnitType::EOSeq => {
+                    nal_units.push(NalData::EOSeq(sc, nri));
+                }
+                NalUnitType::EOStream => {
+                    nal_units.push(NalData::EOStream(sc, nri));
                 }
                 NalUnitType::Unknown(v) => {
                     return Err(Error::InvalidNalUnitType(v));
