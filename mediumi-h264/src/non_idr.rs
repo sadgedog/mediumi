@@ -1,9 +1,4 @@
-use crate::{
-    error::Error,
-    pps::Pps,
-    slice_header::{self, SliceHeader},
-    sps::Sps,
-};
+use crate::{error::Error, nal::NalUnitType, pps::Pps, slice_header::SliceHeader, sps::Sps};
 
 #[derive(Debug)]
 pub struct NonIDR {
@@ -17,7 +12,8 @@ impl NonIDR {
     }
 
     pub fn parse(data: &[u8], sps: &Sps, pps: &Pps) -> Result<Self, Error> {
-        let slice_header = SliceHeader::parse(data, sps, pps)?;
+        let nal_unit_type = NalUnitType::IDR;
+        let slice_header = SliceHeader::parse(data, sps, pps, nal_unit_type)?;
         todo!()
     }
 }
