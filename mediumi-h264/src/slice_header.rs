@@ -3,7 +3,7 @@
 use crate::{
     error::Error,
     nal::NalUnitType,
-    pps::Pps,
+    pps::{Pps, SliceGroup},
     sps::{self, Sps},
     util::bitstream::BitstreamReader,
 };
@@ -29,20 +29,20 @@ pub struct NumRefIdx {
 
 #[derive(Debug)]
 pub enum ModificationCommand {
-    ShortTermSubtract(u32), // idc=0: abs_diff_pic_num_minus1
-    ShortTermAdd(u32),      // idc=1: abs_diff_pic_num_minus1
-    LongTerm(u32),          // idc=2: long_term_pic_num
-                            // idc=3: terminator (not stored, written in to_bytes)
+    Idc0 { abs_diff_pic_num_minus1: u32 },
+    Idc1 { abs_diff_pic_num_minus1: u32 },
+    Idc2 { long_term_pic_num: u32 },
+    // idc=3: terminator (not stored, written in to_bytes)
 }
 
 #[derive(Debug)]
 pub enum MvcModificationCommand {
-    ShortTermSubtract(u32), // idc=0: abs_diff_pic_num_minus1
-    ShortTermAdd(u32),      // idc=1: abs_diff_pic_num_minus1
-    LongTerm(u32),          // idc=2: long_term_pic_num
-    InterViewSubtract(u32), // idc=4: abs_diff_view_idx_minus1
-    InterViewAdd(u32),      // idc=5: abs_diff_view_idx_minus1
-                            // idc=3: terminator (not stored, written in to_bytes)
+    Idc0 { abs_diff_pic_num_minus1: u32 },
+    Idc1 { abs_diff_pic_num_minus1: u32 },
+    Idc2 { long_term_pic_num: u32 },
+    // idc=3: terminator (not stored, written in to_bytes)
+    Idc4 { abs_diff_view_idx_minus1: u32 },
+    Idc5 { abs_diff_view_idx_minus1: u32 },
 }
 
 #[derive(Debug)]
@@ -58,13 +58,56 @@ pub struct RefPicListMvcModification {
 }
 
 impl RefPicListMvcModification {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
+    fn parse_commands(
+        reader: &mut BitstreamReader,
+    ) -> Result<RefPicListMvcModificationList, Error> {
+        let flag = reader.read_bit()?;
+        let mut commands = Vec::new();
+
+        if flag {
+            loop {
+                let idc = reader.read_ue()?;
+                match idc {
+                    0 => commands.push(MvcModificationCommand::Idc0 {
+                        abs_diff_pic_num_minus1: reader.read_ue()?,
+                    }),
+                    1 => commands.push(MvcModificationCommand::Idc1 {
+                        abs_diff_pic_num_minus1: reader.read_ue()?,
+                    }),
+                    2 => commands.push(MvcModificationCommand::Idc2 {
+                        long_term_pic_num: reader.read_ue()?,
+                    }),
+                    3 => break,
+                    4 => commands.push(MvcModificationCommand::Idc4 {
+                        abs_diff_view_idx_minus1: reader.read_ue()?,
+                    }),
+                    5 => commands.push(MvcModificationCommand::Idc5 {
+                        abs_diff_view_idx_minus1: reader.read_ue()?,
+                    }),
+                    _ => return Err(Error::InvalidModificationOfPicNumsIdc(idc)),
+                }
+            }
+        }
+
+        Ok(RefPicListMvcModificationList { flag, commands })
     }
 
-    pub fn parse(reader: &mut BitstreamReader, slice_type: SliceType) -> Result<Self, Error> {
-        // l0, l1 のパース
-        todo!()
+    pub fn parse(reader: &mut BitstreamReader, slice_type: &SliceType) -> Result<Self, Error> {
+        // l0: slice_type != I && != SI
+        let l0 = if slice_type != &SliceType::I && slice_type != &SliceType::SI {
+            Some(Self::parse_commands(reader)?)
+        } else {
+            None
+        };
+
+        // l1: slice_type == B
+        let l1 = if slice_type == &SliceType::B {
+            Some(Self::parse_commands(reader)?)
+        } else {
+            None
+        };
+
+        Ok(Self { l0, l1 })
     }
 }
 
@@ -85,9 +128,46 @@ impl RefPicListModification {
         todo!()
     }
 
-    pub fn parse(reader: &mut BitstreamReader, slice_type: SliceType) -> Result<Self, Error> {
-        // l0, l1 のパース (idc=4,5 追加)
-        todo!()
+    fn parse_commands(reader: &mut BitstreamReader) -> Result<RefPicListModificationList, Error> {
+        let flag = reader.read_bit()?;
+        let mut commands = Vec::new();
+
+        if flag {
+            loop {
+                let idc = reader.read_ue()?;
+                match idc {
+                    0 => commands.push(ModificationCommand::Idc0 {
+                        abs_diff_pic_num_minus1: reader.read_ue()?,
+                    }),
+                    1 => commands.push(ModificationCommand::Idc1 {
+                        abs_diff_pic_num_minus1: reader.read_ue()?,
+                    }),
+                    2 => commands.push(ModificationCommand::Idc2 {
+                        long_term_pic_num: reader.read_ue()?,
+                    }),
+                    3 => break,
+                    _ => return Err(Error::InvalidModificationOfPicNumsIdc(idc)),
+                }
+            }
+        }
+
+        Ok(RefPicListModificationList { flag, commands })
+    }
+
+    pub fn parse(reader: &mut BitstreamReader, slice_type: &SliceType) -> Result<Self, Error> {
+        let l0 = if slice_type != &SliceType::I && slice_type != &SliceType::SI {
+            Some(Self::parse_commands(reader)?)
+        } else {
+            None
+        };
+
+        let l1 = if slice_type == &SliceType::B {
+            Some(Self::parse_commands(reader)?)
+        } else {
+            None
+        };
+
+        Ok(Self { l0, l1 })
     }
 }
 
@@ -100,7 +180,7 @@ pub enum RefPicListMod {
 impl RefPicListMod {
     pub fn parse(
         reader: &mut BitstreamReader,
-        slice_type: SliceType,
+        slice_type: &SliceType,
         nal_unit_type: &NalUnitType,
     ) -> Result<Self, Error> {
         match nal_unit_type {
@@ -127,21 +207,113 @@ pub struct WeightEntry {
 pub struct PredWeightTable {
     pub luma_log2_weight_denom: u32,
     pub chroma_log2_weight_denom: Option<u32>, // ChromaArrayType != 0
-    pub l0: Vec<WeightEntry>,                  // num_ref_idx_l0_active_minus1 + 1 entries
+    pub l0: Option<Vec<WeightEntry>>,          // num_ref_idx_l0_active_minus1 + 1 entries
     pub l1: Option<Vec<WeightEntry>>,          // slice_type % 5 == 1
 }
 
-impl PredWeightTable {}
+impl PredWeightTable {
+    pub fn parse(
+        reader: &mut BitstreamReader,
+        chroma_array_type: u8,
+        num_ref_idx_l0: u32,
+        num_ref_idx_l1: u32,
+    ) -> Result<Self, Error> {
+        let luma_log2_weight_denom = reader.read_ue()?;
+        let chroma_log2_weight_denom = if chroma_array_type != 0 {
+            Some(reader.read_ue()?)
+        } else {
+            None
+        };
+
+        let l0 = Some(Self::parse_entries(
+            reader,
+            chroma_array_type,
+            num_ref_idx_l0,
+        )?);
+        let l1 = if num_ref_idx_l1 > 0 {
+            Some(Self::parse_entries(
+                reader,
+                chroma_array_type,
+                num_ref_idx_l1,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            luma_log2_weight_denom,
+            chroma_log2_weight_denom,
+            l0,
+            l1,
+        })
+    }
+
+    fn parse_entries(
+        reader: &mut BitstreamReader,
+        chroma_array_type: u8,
+        num_ref_idx: u32,
+    ) -> Result<Vec<WeightEntry>, Error> {
+        let mut entries = Vec::new();
+
+        for _ in 0..=num_ref_idx {
+            let luma_weight_flag = reader.read_bit()?;
+            let (luma_weight, luma_offset) = if luma_weight_flag {
+                (Some(reader.read_se()?), Some(reader.read_se()?))
+            } else {
+                (None, None)
+            };
+
+            let (chroma_weight_flag, chroma_weight) = if chroma_array_type != 0 {
+                let flag = reader.read_bit()?;
+                if flag {
+                    let cb_weight = reader.read_se()?;
+                    let cb_offset = reader.read_se()?;
+                    let cr_weight = reader.read_se()?;
+                    let cr_offset = reader.read_se()?;
+                    (
+                        Some(flag),
+                        Some([(cb_weight, cb_offset), (cr_weight, cr_offset)]),
+                    )
+                } else {
+                    (Some(flag), None)
+                }
+            } else {
+                (None, None)
+            };
+
+            entries.push(WeightEntry {
+                luma_weight_flag,
+                luma_weight,
+                luma_offset,
+                chroma_weight_flag,
+                chroma_weight,
+            });
+        }
+
+        Ok(entries)
+    }
+}
 
 #[derive(Debug)]
 pub enum MemoryManagementControlOp {
-    ShortTermUnused(u32),          // mmco=1: difference_of_pic_nums_minus1
-    LongTermUnused(u32),           // mmco=2: long_term_pic_num
-    ShortTermToLongTerm(u32, u32), // mmco=3: difference_of_pic_nums_minus1, long_term_frame_idx
-    MaxLongTermFrameIdx(u32),      // mmco=4: max_long_term_frame_idx_plus1
-    ClearAll,                      // mmco=5
-    AssignLongTermFrameIdx(u32),   // mmco=6: long_term_frame_idx
-                                   // mmco=0: terminator (not stored, written in to_bytes)
+    Mmco1 {
+        difference_of_pic_nums_minus1: u32,
+    },
+    Mmco2 {
+        long_term_pic_num: u32,
+    },
+    Mmco3 {
+        difference_of_pic_nums_minus1: u32,
+        long_term_frame_idx: u32,
+    },
+    Mmco4 {
+        max_long_term_frame_idx_plus1: u32,
+    },
+    Mmco5,
+    Mmco6 {
+        long_term_frame_idx: u32,
+    },
+    // mmco=0: terminator (not stored, written in to_bytes)
 }
 
 #[derive(Debug)]
@@ -156,7 +328,54 @@ pub enum DecRefPicMarking {
     },
 }
 
-impl DecRefPicMarking {}
+impl DecRefPicMarking {
+    pub fn parse(reader: &mut BitstreamReader, is_idr: bool) -> Result<Self, Error> {
+        if is_idr {
+            let no_output_of_prior_pics_flag = reader.read_bit()?;
+            let long_term_reference_flag = reader.read_bit()?;
+            Ok(Self::Idr {
+                no_output_of_prior_pics_flag,
+                long_term_reference_flag,
+            })
+        } else {
+            let adaptive_ref_pic_marking_mode_flag = reader.read_bit()?;
+            let commands = if adaptive_ref_pic_marking_mode_flag {
+                let mut cmds = Vec::new();
+                loop {
+                    let mmco = reader.read_ue()?;
+                    match mmco {
+                        0 => break,
+                        1 => cmds.push(MemoryManagementControlOp::Mmco1 {
+                            difference_of_pic_nums_minus1: reader.read_ue()?,
+                        }),
+                        2 => cmds.push(MemoryManagementControlOp::Mmco2 {
+                            long_term_pic_num: reader.read_ue()?,
+                        }),
+                        3 => cmds.push(MemoryManagementControlOp::Mmco3 {
+                            difference_of_pic_nums_minus1: reader.read_ue()?,
+                            long_term_frame_idx: reader.read_ue()?,
+                        }),
+                        4 => cmds.push(MemoryManagementControlOp::Mmco4 {
+                            max_long_term_frame_idx_plus1: reader.read_ue()?,
+                        }),
+                        5 => cmds.push(MemoryManagementControlOp::Mmco5),
+                        6 => cmds.push(MemoryManagementControlOp::Mmco6 {
+                            long_term_frame_idx: reader.read_ue()?,
+                        }),
+                        _ => return Err(Error::InvalidMemoryManagementControlOp(mmco)),
+                    }
+                }
+                Some(cmds)
+            } else {
+                None
+            };
+            Ok(Self::NonIdr {
+                adaptive_ref_pic_marking_mode_flag,
+                commands,
+            })
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SliceType {
@@ -192,7 +411,7 @@ pub struct DeblockingFilter {
 #[derive(Debug)]
 pub struct SliceHeader {
     pub first_mb_in_slice: u32,
-    pub slice_type: u32,
+    pub slice_type: SliceType,
     pub pic_parameter_set_id: u32,
     pub colour_plane_id: Option<u8>,
     pub frame_num: u16,
@@ -220,15 +439,16 @@ impl SliceHeader {
     }
 
     pub fn parse(
-        data: &[u8],
+        reader: &mut BitstreamReader,
         sps: &Sps,
         pps: &Pps,
         nal_unit_type: NalUnitType,
+        nal_ref_idc: u8,
     ) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let is_idr = nal_unit_type == NalUnitType::IDR;
 
         let first_mb_in_slice = reader.read_ue()?;
-        let slice_type = reader.read_ue()?;
+        let slice_type_raw = reader.read_ue()?;
         let pic_parameter_set_id = reader.read_ue()?;
         let colour_plane_id = if sps
             .high_profile
@@ -262,7 +482,7 @@ impl SliceHeader {
             None
         };
 
-        let field_pic_flag = field_flags.as_ref().map_or(false, |f| f.field_pic_flag);
+        let field_pic_flag = field_flags.as_ref().is_some_and(|f| f.field_pic_flag);
 
         let (pic_order_cnt, delta_pic_order_cnt) = match &sps.pic_order_cnt {
             sps::PicOrderCnt::Type0 {
@@ -306,19 +526,22 @@ impl SliceHeader {
             None
         };
 
-        let st = SliceType::try_from(slice_type)?;
-        let direct_spatial_mv_pred_flag = if st == SliceType::B {
+        let slice_type = SliceType::try_from(slice_type_raw)?;
+        let direct_spatial_mv_pred_flag = if slice_type == SliceType::B {
             Some(reader.read_bit()?)
         } else {
             None
         };
 
-        let num_ref_idx = if st == SliceType::P || st == SliceType::SP || st == SliceType::B {
+        let num_ref_idx = if slice_type == SliceType::P
+            || slice_type == SliceType::SP
+            || slice_type == SliceType::B
+        {
             let num_ref_idx_active_override_flag = reader.read_bit()?;
             let (num_ref_idx_l0_active_minus1, num_ref_idx_l1_active_minus1) =
                 if num_ref_idx_active_override_flag {
                     let l0 = reader.read_ue()?;
-                    let l1 = if st == SliceType::B {
+                    let l1 = if slice_type == SliceType::B {
                         Some(reader.read_ue()?)
                     } else {
                         None
@@ -336,8 +559,132 @@ impl SliceHeader {
             None
         };
 
-        let ref_pic_list_mod = RefPicListMod::parse(&mut reader, st, &nal_unit_type)?;
+        let ref_pic_list_mod = RefPicListMod::parse(reader, &slice_type, &nal_unit_type)?;
 
-        todo!()
+        let pred_weight_table = if (pps.weighted_pred_flag
+            && (matches!(slice_type, SliceType::P | SliceType::SP)))
+            || (pps.weighted_bipred_idc == 1 && slice_type == SliceType::B)
+        {
+            let chroma_array_type = sps.high_profile.as_ref().map_or(0, |hp| {
+                if hp.separate_colour_plane_flag == Some(true) {
+                    0
+                } else {
+                    hp.chroma_format_idc
+                }
+            });
+
+            let num_ref_idx_l0 = num_ref_idx
+                .as_ref()
+                .and_then(|n| n.num_ref_idx_l0_active_minus1)
+                .unwrap_or(pps.num_ref_idx_l0_default_active_minus1);
+
+            let num_ref_idx_l1 = num_ref_idx
+                .as_ref()
+                .and_then(|n| n.num_ref_idx_l1_active_minus1)
+                .unwrap_or(pps.num_ref_idx_l1_default_active_minus1);
+
+            Some(PredWeightTable::parse(
+                reader,
+                chroma_array_type,
+                num_ref_idx_l0,
+                num_ref_idx_l1,
+            )?)
+        } else {
+            None
+        };
+
+        let dec_ref_pic_marking = if nal_ref_idc != 0 {
+            Some(DecRefPicMarking::parse(reader, is_idr)?)
+        } else {
+            None
+        };
+
+        let cabac_init_idc = if pps.entropy_coding_mode_flag
+            && slice_type != SliceType::I
+            && slice_type != SliceType::SI
+        {
+            Some(reader.read_ue()?)
+        } else {
+            None
+        };
+
+        let slice_qp_delta = reader.read_se()?;
+
+        let (sp_for_switch_flag, slice_qs_delta) =
+            if slice_type == SliceType::SP || slice_type == SliceType::SI {
+                let sp_flag = if slice_type == SliceType::SP {
+                    Some(reader.read_bit()?)
+                } else {
+                    None
+                };
+                let qs_delta = reader.read_se()?;
+
+                (sp_flag, Some(qs_delta))
+            } else {
+                (None, None)
+            };
+
+        let deblocking_filter = if pps.deblocking_filter_control_present_flag {
+            let disable_deblocking_filter_idc = reader.read_ue()?;
+            let (slice_alpha_c0_offset_div2, slice_beta_offset_div2) =
+                if disable_deblocking_filter_idc != 1 {
+                    (Some(reader.read_se()?), Some(reader.read_se()?))
+                } else {
+                    (None, None)
+                };
+            Some(DeblockingFilter {
+                disable_deblocking_filter_idc,
+                slice_alpha_c0_offset_div2,
+                slice_beta_offset_div2,
+            })
+        } else {
+            None
+        };
+
+        let slice_group_change_cycle = if pps.num_slice_groups_minus1 > 0 {
+            match &pps.slice_group {
+                Some(SliceGroup::Type3_5 {
+                    slice_group_change_rate_minus1,
+                    ..
+                }) => {
+                    // bit width = Ceil(Log2(PicSizeInMapUnits / SliceGroupChangeRate + 1))
+                    let pic_size_in_map_units = (sps.pic_width_in_mbs_minus1 + 1)
+                        * (sps.pic_height_in_map_units_minus1 + 1);
+                    let slice_group_change_rate = slice_group_change_rate_minus1 + 1;
+                    let bits = ((pic_size_in_map_units as f64 / slice_group_change_rate as f64
+                        + 1.0)
+                        .log2()
+                        .ceil()) as u8;
+                    Some(reader.read_bits(bits)?)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        Ok(Self {
+            first_mb_in_slice,
+            slice_type,
+            pic_parameter_set_id,
+            colour_plane_id,
+            frame_num,
+            field_flags,
+            idr_pic_id,
+            pic_order_cnt,
+            delta_pic_order_cnt,
+            redundant_pic_cnt,
+            direct_spatial_mv_pred_flag,
+            num_ref_idx,
+            ref_pic_list_mod,
+            pred_weight_table,
+            dec_ref_pic_marking,
+            cabac_init_idc,
+            slice_qp_delta,
+            sp_for_switch_flag,
+            slice_qs_delta,
+            deblocking_filter,
+            slice_group_change_cycle,
+        })
     }
 }

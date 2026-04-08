@@ -69,7 +69,7 @@ use crate::{
     {error::Error, sps::Sps},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SliceGroup {
     Type0 {
         slice_group_map_type: u32,
@@ -92,7 +92,7 @@ pub enum SliceGroup {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MoreRbspData {
     pub transform_8x8_mode_flag: bool,
     pub pic_scaling_matrix_present_flag: bool,
@@ -102,7 +102,7 @@ pub struct MoreRbspData {
     pub second_chroma_qp_index_offset: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pps {
     pub pic_parameter_set_id: u32,
     pub seq_parameter_set_id: u32,

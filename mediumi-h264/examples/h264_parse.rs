@@ -35,6 +35,12 @@ fn main() {
                     i, sc, nri, aud
                 );
             }
+            NalData::NonIdr(sc, nri, non_idr) => {
+                println!(
+                    "[{}] Type: NonIDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
+                    i, sc, nri, non_idr.slice_header
+                );
+            }
             NalData::Raw(_, nri, nal_type, rbsp) => {
                 println!(
                     "[{}] Type: {:?}, NRI: {}, RBSP size: {} bytes",

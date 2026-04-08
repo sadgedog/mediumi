@@ -1,4 +1,7 @@
-use crate::{error::Error, nal::NalUnitType, pps::Pps, slice_header::SliceHeader, sps::Sps};
+use crate::{
+    error::Error, nal::NalUnitType, pps::Pps, slice_header::SliceHeader, sps::Sps,
+    util::bitstream::BitstreamReader,
+};
 
 #[derive(Debug)]
 pub struct NonIDR {
@@ -11,9 +14,15 @@ impl NonIDR {
         todo!()
     }
 
-    pub fn parse(data: &[u8], sps: &Sps, pps: &Pps) -> Result<Self, Error> {
-        let nal_unit_type = NalUnitType::IDR;
-        let slice_header = SliceHeader::parse(data, sps, pps, nal_unit_type)?;
-        todo!()
+    pub fn parse(data: &[u8], sps: &Sps, pps: &Pps, nal_ref_idc: u8) -> Result<Self, Error> {
+        let mut reader = BitstreamReader::new(data);
+        let slice_header =
+            SliceHeader::parse(&mut reader, sps, pps, NalUnitType::NonIDR, nal_ref_idc)?;
+        let slice_data = reader.read_remaining_bytes().0;
+
+        Ok(Self {
+            slice_header,
+            slice_data,
+        })
     }
 }

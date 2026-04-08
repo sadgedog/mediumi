@@ -1,3 +1,5 @@
+use crate::slice_header::SliceType;
+
 #[derive(Debug, PartialEq)]
 pub enum Error {
     InvalidForbiddenZeroBit,
@@ -9,6 +11,9 @@ pub enum Error {
     MissingHighProfileData,
     InvalidNalUnitType(u8),
     InvalidPrimaryPicType(u8),
+    InvalidSliceType(SliceType),
+    InvalidModificationOfPicNumsIdc(u32),
+    InvalidMemoryManagementControlOp(u32),
 }
 
 impl std::fmt::Display for Error {
@@ -40,14 +45,18 @@ impl std::fmt::Display for Error {
             Error::InvalidSliceGroupMapType(val) => {
                 write!(f, "Invalid Slice Group Map Type: expected 0-6, got {}", val)
             }
-
             Error::MissingHighProfileData => {
                 write!(f, "Missing high profile data(chroma_format_idc)")
             }
-            Error::InvalidNalUnitType(val) => {
-                write!(f, "Invalid NAL unit type: {}", val)
-            }
+            Error::InvalidNalUnitType(val) => write!(f, "Invalid NAL unit type: {}", val),
             Error::InvalidPrimaryPicType(val) => write!(f, "Invalid Primary Pic Type: {}", val),
+            Error::InvalidSliceType(val) => write!(f, "Invalid Slice Type: {:?}", val),
+            Error::InvalidModificationOfPicNumsIdc(val) => {
+                write!(f, "Invalid modification_of_pic_nums_idc: {}", val)
+            }
+            Error::InvalidMemoryManagementControlOp(val) => {
+                write!(f, "Invalid memory_management_control_operation: {}", val)
+            }
         }
     }
 }

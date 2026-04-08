@@ -28,12 +28,14 @@ use crate::{
     aud::Aud,
     error::Error,
     nal::{NalUnit, NalUnitType},
+    non_idr::NonIDR,
     pps::Pps,
     sps::Sps,
 };
 
 #[derive(Debug)]
 pub enum NalData {
+    NonIdr(StartCode, u8, Box<NonIDR>),
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
     Aud(StartCode, u8, Aud),
@@ -77,6 +79,7 @@ impl Processor {
                     buf.push(nri << 5 | u8::from(nal_type));
                     buf.extend_from_slice(rbsp);
                 }
+                _ => {}
             }
         }
         buf
@@ -87,6 +90,7 @@ impl Processor {
         let annex_b_list = parse_all(pes_payload)?;
         let mut nal_units = Vec::with_capacity(annex_b_list.len());
         let mut last_sps: Option<Sps> = None;
+        let mut last_pps: Option<Pps> = None;
 
         for ab in annex_b_list {
             let sc = ab.start_code;
@@ -94,6 +98,15 @@ impl Processor {
             let nal_type = ab.nal_unit.header.nal_unit_type;
 
             match nal_type {
+                NalUnitType::NonIDR => {
+                    if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
+                        let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                        let non_idr = NonIDR::parse(&rbsp, sps, pps, nri)?;
+                        nal_units.push(NalData::NonIdr(sc, nri, Box::new(non_idr)));
+                    } else {
+                        nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                    }
+                }
                 NalUnitType::SPS => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let sps = Sps::parse(&rbsp)?;
@@ -101,9 +114,10 @@ impl Processor {
                     nal_units.push(NalData::Sps(sc, nri, Box::new(sps)));
                 }
                 NalUnitType::PPS => {
-                    if let Some(ref sps) = last_sps {
+                    if let Some(sps) = &last_sps {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                         let pps = Pps::parse(&rbsp, sps)?;
+                        last_pps = Some(pps.clone());
                         nal_units.push(NalData::Pps(sc, nri, Box::new(pps)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
