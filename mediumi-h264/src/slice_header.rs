@@ -605,7 +605,7 @@ impl SliceHeader {
         pps: &Pps,
     ) -> Result<(), Error> {
         writer.write_ue(self.first_mb_in_slice);
-        writer.write_ue(self.slice_type as u32);
+        writer.write_ue(self.slice_type);
         writer.write_ue(self.pic_parameter_set_id);
 
         if let Some(colour_plane_id) = self.colour_plane_id {
@@ -625,17 +625,14 @@ impl SliceHeader {
             writer.write_ue(idr_pid_id);
         }
 
-        if let Some(poc) = &self.pic_order_cnt {
-            match &sps.pic_order_cnt {
-                sps::PicOrderCnt::Type0 {
-                    log2_max_pic_order_cnt_lsb_minus4,
-                } => {
-                    writer.write_bits(poc.pic_order_cnt_lsb, log2_max_pic_order_cnt_lsb_minus4 + 4);
-                    if let Some(delta) = poc.delta_pic_order_cnt_bottom {
-                        writer.write_se(delta);
-                    }
-                }
-                _ => {}
+        if let Some(poc) = &self.pic_order_cnt
+            && let sps::PicOrderCnt::Type0 {
+                log2_max_pic_order_cnt_lsb_minus4,
+            } = &sps.pic_order_cnt
+        {
+            writer.write_bits(poc.pic_order_cnt_lsb, log2_max_pic_order_cnt_lsb_minus4 + 4);
+            if let Some(delta) = poc.delta_pic_order_cnt_bottom {
+                writer.write_se(delta);
             }
         }
 
@@ -650,23 +647,23 @@ impl SliceHeader {
         }
 
         let st = SliceType::try_from(self.slice_type)?;
-        if st == SliceType::B {
-            if let Some(direct_spatial_mv_pred_flag) = self.direct_spatial_mv_pred_flag {
-                writer.write_bool(direct_spatial_mv_pred_flag);
-            }
+        if st == SliceType::B
+            && let Some(direct_spatial_mv_pred_flag) = self.direct_spatial_mv_pred_flag
+        {
+            writer.write_bool(direct_spatial_mv_pred_flag);
         }
 
-        if matches!(st, SliceType::P | SliceType::SP | SliceType::B) {
-            if let Some(nri) = &self.num_ref_idx {
-                writer.write_bool(nri.num_ref_idx_active_override_flag);
+        if matches!(st, SliceType::P | SliceType::SP | SliceType::B)
+            && let Some(nri) = &self.num_ref_idx
+        {
+            writer.write_bool(nri.num_ref_idx_active_override_flag);
 
-                if let Some(num_ref_idx_l0_active_minus1) = nri.num_ref_idx_l0_active_minus1 {
-                    writer.write_ue(num_ref_idx_l0_active_minus1);
-                }
+            if let Some(num_ref_idx_l0_active_minus1) = nri.num_ref_idx_l0_active_minus1 {
+                writer.write_ue(num_ref_idx_l0_active_minus1);
+            }
 
-                if let Some(num_ref_idx_l1_active_minus1) = nri.num_ref_idx_l1_active_minus1 {
-                    writer.write_ue(num_ref_idx_l1_active_minus1);
-                }
+            if let Some(num_ref_idx_l1_active_minus1) = nri.num_ref_idx_l1_active_minus1 {
+                writer.write_ue(num_ref_idx_l1_active_minus1);
             }
         }
 
@@ -708,20 +705,19 @@ impl SliceHeader {
             }
         }
 
-        if let Some(slice_group_change_cycle) = self.slice_group_change_cycle {
-            if let Some(SliceGroup::Type3_5 {
+        if let Some(slice_group_change_cycle) = self.slice_group_change_cycle
+            && let Some(SliceGroup::Type3_5 {
                 slice_group_change_rate_minus1,
                 ..
             }) = &pps.slice_group
-            {
-                let pic_size_in_map_units =
-                    (sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1);
-                let slice_group_change_rate = slice_group_change_rate_minus1 + 1;
-                let bits = ((pic_size_in_map_units as f64 / slice_group_change_rate as f64 + 1.0)
-                    .log2()
-                    .ceil()) as u8;
-                writer.write_bits(slice_group_change_cycle, bits);
-            }
+        {
+            let pic_size_in_map_units =
+                (sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1);
+            let slice_group_change_rate = slice_group_change_rate_minus1 + 1;
+            let bits = ((pic_size_in_map_units as f64 / slice_group_change_rate as f64 + 1.0)
+                .log2()
+                .ceil()) as u8;
+            writer.write_bits(slice_group_change_cycle, bits);
         }
 
         Ok(())

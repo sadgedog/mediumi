@@ -17,6 +17,18 @@ fn main() {
     );
     for (i, nal) in result.nal_units.iter().enumerate() {
         match nal {
+            NalData::NonIdr(sc, nri, non_idr) => {
+                println!(
+                    "[{}] Type: NonIDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
+                    i, sc, nri, non_idr.slice_header
+                );
+            }
+            NalData::Idr(sc, nri, idr) => {
+                println!(
+                    "[{}] Type: IDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
+                    i, sc, nri, idr.slice_header
+                );
+            }
             NalData::Sps(sc, nri, sps) => {
                 println!(
                     "[{}] Type: SPS, StartCode: {:?}, NRI: {}, SPS: {:?}",
@@ -35,23 +47,17 @@ fn main() {
                     i, sc, nri, aud
                 );
             }
-            NalData::Idr(sc, nri, idr) => {
-                println!(
-                    "[{}] Type: IDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
-                    i, sc, nri, idr.slice_header
-                );
-            }
-            NalData::NonIdr(sc, nri, non_idr) => {
-                println!(
-                    "[{}] Type: NonIDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
-                    i, sc, nri, non_idr.slice_header
-                );
-            }
             NalData::EOSeq(sc, nri) => {
                 println!("[{}] Type: EOSeq, StartCode: {:?}, NRI: {}", i, sc, nri);
             }
             NalData::EOStream(sc, nri) => {
                 println!("[{}] Type: EOStream, StartCode: {:?}, NRI: {}", i, sc, nri);
+            }
+            NalData::FillerData(sc, nri, filler) => {
+                println!(
+                    "[{}] Type: FillerData, StartCode: {:?}, NRI: {}, ff_bytes: {}",
+                    i, sc, nri, filler.ff_byte_count
+                );
             }
             NalData::Raw(_, nri, nal_type, rbsp) => {
                 println!(

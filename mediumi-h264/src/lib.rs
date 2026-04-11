@@ -16,6 +16,7 @@
 pub mod annex_b;
 pub mod aud;
 pub mod error;
+pub mod filler_data;
 pub mod idr;
 pub mod nal;
 pub mod non_idr;
@@ -28,6 +29,7 @@ use crate::{
     annex_b::{StartCode, parse_all},
     aud::Aud,
     error::Error,
+    filler_data::FillerData,
     idr::IDR,
     nal::{NalUnit, NalUnitType},
     non_idr::NonIDR,
@@ -44,6 +46,7 @@ pub enum NalData {
     Aud(StartCode, u8, Aud),
     EOSeq(StartCode, u8),
     EOStream(StartCode, u8),
+    FillerData(StartCode, u8, filler_data::FillerData),
     Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
 }
 
@@ -109,6 +112,13 @@ impl Processor {
                 NalData::EOStream(sc, nri) => {
                     buf.extend_from_slice(sc.as_bytes());
                     buf.push(nri << 5 | u8::from(&NalUnitType::EOStream));
+                }
+                NalData::FillerData(sc, nri, filler) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::FillerData));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &filler.to_bytes(),
+                    ));
                 }
                 NalData::Raw(sc, nri, nal_type, rbsp) => {
                     buf.extend_from_slice(sc.as_bytes());
@@ -177,6 +187,11 @@ impl Processor {
                 }
                 NalUnitType::EOStream => {
                     nal_units.push(NalData::EOStream(sc, nri));
+                }
+                NalUnitType::FillerData => {
+                    let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                    let filler = FillerData::parse(&rbsp);
+                    nal_units.push(NalData::FillerData(sc, nri, filler));
                 }
                 NalUnitType::Unknown(v) => {
                     return Err(Error::InvalidNalUnitType(v));
