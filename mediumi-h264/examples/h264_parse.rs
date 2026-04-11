@@ -35,6 +35,12 @@ fn main() {
                     i, sc, nri, aud
                 );
             }
+            NalData::Idr(sc, nri, idr) => {
+                println!(
+                    "[{}] Type: IDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
+                    i, sc, nri, idr.slice_header
+                );
+            }
             NalData::NonIdr(sc, nri, non_idr) => {
                 println!(
                     "[{}] Type: NonIDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",

@@ -16,6 +16,7 @@
 pub mod annex_b;
 pub mod aud;
 pub mod error;
+pub mod idr;
 pub mod nal;
 pub mod non_idr;
 pub mod pps;
@@ -27,6 +28,7 @@ use crate::{
     annex_b::{StartCode, parse_all},
     aud::Aud,
     error::Error,
+    idr::IDR,
     nal::{NalUnit, NalUnitType},
     non_idr::NonIDR,
     pps::Pps,
@@ -36,6 +38,7 @@ use crate::{
 #[derive(Debug)]
 pub enum NalData {
     NonIdr(StartCode, u8, Box<NonIDR>),
+    Idr(StartCode, u8, Box<IDR>),
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
     Aud(StartCode, u8, Aud),
@@ -64,6 +67,15 @@ impl Processor {
                         buf.push(nri << 5 | u8::from(&NalUnitType::NonIDR));
                         buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                             &non_idr.to_bytes(sps, pps).unwrap(),
+                        ));
+                    }
+                }
+                NalData::Idr(sc, nri, idr) => {
+                    if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
+                        buf.extend_from_slice(sc.as_bytes());
+                        buf.push(nri << 5 | u8::from(&NalUnitType::IDR));
+                        buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                            &idr.to_bytes(sps, pps).unwrap(),
                         ));
                     }
                 }
@@ -126,6 +138,15 @@ impl Processor {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                         let non_idr = NonIDR::parse(&rbsp, sps, pps, nri)?;
                         nal_units.push(NalData::NonIdr(sc, nri, Box::new(non_idr)));
+                    } else {
+                        nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                    }
+                }
+                NalUnitType::IDR => {
+                    if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
+                        let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                        let idr = IDR::parse(&rbsp, sps, pps, nri)?;
+                        nal_units.push(NalData::Idr(sc, nri, Box::new(idr)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
