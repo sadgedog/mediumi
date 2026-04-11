@@ -53,9 +53,22 @@ impl Processor {
     /// Write codec data
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
+        let mut last_sps: Option<&Sps> = None;
+        let mut last_pps: Option<&Pps> = None;
+
         for nal in &self.nal_units {
             match nal {
+                NalData::NonIdr(sc, nri, non_idr) => {
+                    if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
+                        buf.extend_from_slice(sc.as_bytes());
+                        buf.push(nri << 5 | u8::from(&NalUnitType::NonIDR));
+                        buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                            &non_idr.to_bytes(sps, pps).unwrap(),
+                        ));
+                    }
+                }
                 NalData::Sps(sc, nri, sps) => {
+                    last_sps = Some(sps);
                     buf.extend_from_slice(sc.as_bytes());
                     buf.push(nri << 5 | u8::from(&NalUnitType::SPS));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
@@ -63,6 +76,7 @@ impl Processor {
                     ));
                 }
                 NalData::Pps(sc, nri, pps) => {
+                    last_pps = Some(pps);
                     buf.extend_from_slice(sc.as_bytes());
                     buf.push(nri << 5 | u8::from(&NalUnitType::PPS));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
@@ -89,7 +103,6 @@ impl Processor {
                     buf.push(nri << 5 | u8::from(nal_type));
                     buf.extend_from_slice(rbsp);
                 }
-                _ => {}
             }
         }
         buf

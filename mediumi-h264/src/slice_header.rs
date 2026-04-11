@@ -5,7 +5,7 @@ use crate::{
     nal::NalUnitType,
     pps::{Pps, SliceGroup},
     sps::{self, Sps},
-    util::bitstream::BitstreamReader,
+    util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 
 #[derive(Debug)]
@@ -58,6 +58,52 @@ pub struct RefPicListMvcModification {
 }
 
 impl RefPicListMvcModification {
+    fn write_commands(writer: &mut BitstreamWriter, list: &Option<RefPicListMvcModificationList>) {
+        if let Some(list) = list {
+            writer.write_bool(list.flag);
+            if list.flag {
+                for cmd in &list.commands {
+                    match cmd {
+                        MvcModificationCommand::Idc0 {
+                            abs_diff_pic_num_minus1,
+                        } => {
+                            writer.write_ue(0); // modification_of_pic_nums_idc
+                            writer.write_ue(*abs_diff_pic_num_minus1);
+                        }
+                        MvcModificationCommand::Idc1 {
+                            abs_diff_pic_num_minus1,
+                        } => {
+                            writer.write_ue(1);
+                            writer.write_ue(*abs_diff_pic_num_minus1);
+                        }
+                        MvcModificationCommand::Idc2 { long_term_pic_num } => {
+                            writer.write_ue(2);
+                            writer.write_ue(*long_term_pic_num);
+                        }
+                        MvcModificationCommand::Idc4 {
+                            abs_diff_view_idx_minus1,
+                        } => {
+                            writer.write_ue(4);
+                            writer.write_ue(*abs_diff_view_idx_minus1);
+                        }
+                        MvcModificationCommand::Idc5 {
+                            abs_diff_view_idx_minus1,
+                        } => {
+                            writer.write_ue(5);
+                            writer.write_ue(*abs_diff_view_idx_minus1);
+                        }
+                    }
+                }
+                writer.write_ue(3); // terminator
+            }
+        }
+    }
+
+    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        Self::write_commands(writer, &self.l0);
+        Self::write_commands(writer, &self.l1);
+    }
+
     fn parse_commands(
         reader: &mut BitstreamReader,
     ) -> Result<RefPicListMvcModificationList, Error> {
@@ -124,8 +170,38 @@ pub struct RefPicListModification {
 }
 
 impl RefPicListModification {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
+    fn write_commands(writer: &mut BitstreamWriter, list: &Option<RefPicListModificationList>) {
+        if let Some(list) = list {
+            writer.write_bool(list.flag);
+            if list.flag {
+                for cmd in &list.commands {
+                    match cmd {
+                        ModificationCommand::Idc0 {
+                            abs_diff_pic_num_minus1,
+                        } => {
+                            writer.write_ue(0);
+                            writer.write_ue(*abs_diff_pic_num_minus1);
+                        }
+                        ModificationCommand::Idc1 {
+                            abs_diff_pic_num_minus1,
+                        } => {
+                            writer.write_ue(1);
+                            writer.write_ue(*abs_diff_pic_num_minus1);
+                        }
+                        ModificationCommand::Idc2 { long_term_pic_num } => {
+                            writer.write_ue(2);
+                            writer.write_ue(*long_term_pic_num);
+                        }
+                    }
+                }
+                writer.write_ue(3); // terminator
+            }
+        }
+    }
+
+    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        Self::write_commands(writer, &self.l0);
+        Self::write_commands(writer, &self.l1);
     }
 
     fn parse_commands(reader: &mut BitstreamReader) -> Result<RefPicListModificationList, Error> {
@@ -212,6 +288,36 @@ pub struct PredWeightTable {
 }
 
 impl PredWeightTable {
+    fn write_entries(writer: &mut BitstreamWriter, entries: &Option<Vec<WeightEntry>>) {
+        if let Some(entries) = entries {
+            for entry in entries {
+                writer.write_bool(entry.luma_weight_flag);
+                if let (Some(w), Some(o)) = (entry.luma_weight, entry.luma_offset) {
+                    writer.write_se(w);
+                    writer.write_se(o);
+                }
+                if let Some(chroma_weight_flag) = entry.chroma_weight_flag {
+                    writer.write_bool(chroma_weight_flag);
+                    if let Some(chroma) = &entry.chroma_weight {
+                        for (w, o) in chroma {
+                            writer.write_se(*w);
+                            writer.write_se(*o);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        writer.write_ue(self.luma_log2_weight_denom);
+        if let Some(chroma_log2_weight_denom) = self.chroma_log2_weight_denom {
+            writer.write_ue(chroma_log2_weight_denom);
+        }
+        Self::write_entries(writer, &self.l0);
+        Self::write_entries(writer, &self.l1);
+    }
+
     pub fn parse(
         reader: &mut BitstreamReader,
         chroma_array_type: u8,
@@ -329,6 +435,64 @@ pub enum DecRefPicMarking {
 }
 
 impl DecRefPicMarking {
+    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        match self {
+            Self::Idr {
+                no_output_of_prior_pics_flag,
+                long_term_reference_flag,
+            } => {
+                writer.write_bool(*no_output_of_prior_pics_flag);
+                writer.write_bool(*long_term_reference_flag);
+            }
+            Self::NonIdr {
+                adaptive_ref_pic_marking_mode_flag,
+                commands,
+            } => {
+                writer.write_bool(*adaptive_ref_pic_marking_mode_flag);
+                if let Some(cmds) = commands {
+                    for cmd in cmds {
+                        match cmd {
+                            MemoryManagementControlOp::Mmco1 {
+                                difference_of_pic_nums_minus1,
+                            } => {
+                                writer.write_ue(1); // memory_management_control_operation
+                                writer.write_ue(*difference_of_pic_nums_minus1);
+                            }
+                            MemoryManagementControlOp::Mmco2 { long_term_pic_num } => {
+                                writer.write_ue(2);
+                                writer.write_ue(*long_term_pic_num);
+                            }
+                            MemoryManagementControlOp::Mmco3 {
+                                difference_of_pic_nums_minus1,
+                                long_term_frame_idx,
+                            } => {
+                                writer.write_ue(3);
+                                writer.write_ue(*difference_of_pic_nums_minus1);
+                                writer.write_ue(*long_term_frame_idx);
+                            }
+                            MemoryManagementControlOp::Mmco4 {
+                                max_long_term_frame_idx_plus1,
+                            } => {
+                                writer.write_ue(4);
+                                writer.write_ue(*max_long_term_frame_idx_plus1);
+                            }
+                            MemoryManagementControlOp::Mmco5 => {
+                                writer.write_ue(5);
+                            }
+                            MemoryManagementControlOp::Mmco6 {
+                                long_term_frame_idx,
+                            } => {
+                                writer.write_ue(6);
+                                writer.write_ue(*long_term_frame_idx);
+                            }
+                        }
+                    }
+                    writer.write_ue(0); // terminator
+                }
+            }
+        }
+    }
+
     pub fn parse(reader: &mut BitstreamReader, is_idr: bool) -> Result<Self, Error> {
         if is_idr {
             let no_output_of_prior_pics_flag = reader.read_bit()?;
@@ -411,7 +575,7 @@ pub struct DeblockingFilter {
 #[derive(Debug)]
 pub struct SliceHeader {
     pub first_mb_in_slice: u32,
-    pub slice_type: SliceType,
+    pub slice_type: u32,
     pub pic_parameter_set_id: u32,
     pub colour_plane_id: Option<u8>,
     pub frame_num: u16,
@@ -434,8 +598,133 @@ pub struct SliceHeader {
 }
 
 impl SliceHeader {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
+    pub fn to_bytes(
+        &self,
+        writer: &mut BitstreamWriter,
+        sps: &Sps,
+        pps: &Pps,
+    ) -> Result<(), Error> {
+        writer.write_ue(self.first_mb_in_slice);
+        writer.write_ue(self.slice_type as u32);
+        writer.write_ue(self.pic_parameter_set_id);
+
+        if let Some(colour_plane_id) = self.colour_plane_id {
+            writer.write_bits(colour_plane_id as u32, 2);
+        }
+
+        writer.write_bits(self.frame_num as u32, sps.log2_max_frame_num_minus4 + 4);
+
+        if let Some(field_flags) = &self.field_flags {
+            writer.write_bool(field_flags.field_pic_flag);
+            if let Some(bottom_field_flag) = field_flags.bottom_field_flag {
+                writer.write_bool(bottom_field_flag);
+            }
+        }
+
+        if let Some(idr_pid_id) = self.idr_pic_id {
+            writer.write_ue(idr_pid_id);
+        }
+
+        if let Some(poc) = &self.pic_order_cnt {
+            match &sps.pic_order_cnt {
+                sps::PicOrderCnt::Type0 {
+                    log2_max_pic_order_cnt_lsb_minus4,
+                } => {
+                    writer.write_bits(poc.pic_order_cnt_lsb, log2_max_pic_order_cnt_lsb_minus4 + 4);
+                    if let Some(delta) = poc.delta_pic_order_cnt_bottom {
+                        writer.write_se(delta);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(deltas) = &self.delta_pic_order_cnt {
+            for delta in deltas {
+                writer.write_se(*delta);
+            }
+        }
+
+        if let Some(redundant_pic_cnt) = self.redundant_pic_cnt {
+            writer.write_ue(redundant_pic_cnt);
+        }
+
+        let st = SliceType::try_from(self.slice_type)?;
+        if st == SliceType::B {
+            if let Some(direct_spatial_mv_pred_flag) = self.direct_spatial_mv_pred_flag {
+                writer.write_bool(direct_spatial_mv_pred_flag);
+            }
+        }
+
+        if matches!(st, SliceType::P | SliceType::SP | SliceType::B) {
+            if let Some(nri) = &self.num_ref_idx {
+                writer.write_bool(nri.num_ref_idx_active_override_flag);
+
+                if let Some(num_ref_idx_l0_active_minus1) = nri.num_ref_idx_l0_active_minus1 {
+                    writer.write_ue(num_ref_idx_l0_active_minus1);
+                }
+
+                if let Some(num_ref_idx_l1_active_minus1) = nri.num_ref_idx_l1_active_minus1 {
+                    writer.write_ue(num_ref_idx_l1_active_minus1);
+                }
+            }
+        }
+
+        match &self.ref_pic_list_mod {
+            RefPicListMod::MvcModification(mvc) => mvc.to_bytes(writer),
+            RefPicListMod::Modification(m) => m.to_bytes(writer),
+        }
+
+        if let Some(pwt) = &self.pred_weight_table {
+            pwt.to_bytes(writer);
+        }
+
+        if let Some(drpm) = &self.dec_ref_pic_marking {
+            drpm.to_bytes(writer);
+        }
+
+        if let Some(cabac_init_idc) = self.cabac_init_idc {
+            writer.write_ue(cabac_init_idc);
+        }
+
+        writer.write_se(self.slice_qp_delta);
+
+        if let Some(sp_for_switch_flag) = self.sp_for_switch_flag {
+            writer.write_bool(sp_for_switch_flag);
+        }
+
+        if let Some(slice_qs_delta) = self.slice_qs_delta {
+            writer.write_se(slice_qs_delta);
+        }
+
+        if let Some(dfcpf) = &self.deblocking_filter {
+            writer.write_ue(dfcpf.disable_deblocking_filter_idc);
+            if let (Some(slice_alpha_c0_offset_div2), Some(slice_beta_offset_div2)) = (
+                dfcpf.slice_alpha_c0_offset_div2,
+                dfcpf.slice_beta_offset_div2,
+            ) {
+                writer.write_se(slice_alpha_c0_offset_div2);
+                writer.write_se(slice_beta_offset_div2);
+            }
+        }
+
+        if let Some(slice_group_change_cycle) = self.slice_group_change_cycle {
+            if let Some(SliceGroup::Type3_5 {
+                slice_group_change_rate_minus1,
+                ..
+            }) = &pps.slice_group
+            {
+                let pic_size_in_map_units =
+                    (sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1);
+                let slice_group_change_rate = slice_group_change_rate_minus1 + 1;
+                let bits = ((pic_size_in_map_units as f64 / slice_group_change_rate as f64 + 1.0)
+                    .log2()
+                    .ceil()) as u8;
+                writer.write_bits(slice_group_change_cycle, bits);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn parse(
@@ -448,7 +737,7 @@ impl SliceHeader {
         let is_idr = nal_unit_type == NalUnitType::IDR;
 
         let first_mb_in_slice = reader.read_ue()?;
-        let slice_type_raw = reader.read_ue()?;
+        let slice_type = reader.read_ue()?;
         let pic_parameter_set_id = reader.read_ue()?;
         let colour_plane_id = if sps
             .high_profile
@@ -526,22 +815,19 @@ impl SliceHeader {
             None
         };
 
-        let slice_type = SliceType::try_from(slice_type_raw)?;
-        let direct_spatial_mv_pred_flag = if slice_type == SliceType::B {
+        let st = SliceType::try_from(slice_type)?;
+        let direct_spatial_mv_pred_flag = if st == SliceType::B {
             Some(reader.read_bit()?)
         } else {
             None
         };
 
-        let num_ref_idx = if slice_type == SliceType::P
-            || slice_type == SliceType::SP
-            || slice_type == SliceType::B
-        {
+        let num_ref_idx = if matches!(st, SliceType::P | SliceType::SP | SliceType::B) {
             let num_ref_idx_active_override_flag = reader.read_bit()?;
             let (num_ref_idx_l0_active_minus1, num_ref_idx_l1_active_minus1) =
                 if num_ref_idx_active_override_flag {
                     let l0 = reader.read_ue()?;
-                    let l1 = if slice_type == SliceType::B {
+                    let l1 = if st == SliceType::B {
                         Some(reader.read_ue()?)
                     } else {
                         None
@@ -559,11 +845,11 @@ impl SliceHeader {
             None
         };
 
-        let ref_pic_list_mod = RefPicListMod::parse(reader, &slice_type, &nal_unit_type)?;
+        let ref_pic_list_mod = RefPicListMod::parse(reader, &st, &nal_unit_type)?;
 
         let pred_weight_table = if (pps.weighted_pred_flag
-            && (matches!(slice_type, SliceType::P | SliceType::SP)))
-            || (pps.weighted_bipred_idc == 1 && slice_type == SliceType::B)
+            && (matches!(st, SliceType::P | SliceType::SP)))
+            || (pps.weighted_bipred_idc == 1 && st == SliceType::B)
         {
             let chroma_array_type = sps.high_profile.as_ref().map_or(0, |hp| {
                 if hp.separate_colour_plane_flag == Some(true) {
@@ -599,30 +885,27 @@ impl SliceHeader {
             None
         };
 
-        let cabac_init_idc = if pps.entropy_coding_mode_flag
-            && slice_type != SliceType::I
-            && slice_type != SliceType::SI
-        {
-            Some(reader.read_ue()?)
-        } else {
-            None
-        };
+        let cabac_init_idc =
+            if pps.entropy_coding_mode_flag && st != SliceType::I && st != SliceType::SI {
+                Some(reader.read_ue()?)
+            } else {
+                None
+            };
 
         let slice_qp_delta = reader.read_se()?;
 
-        let (sp_for_switch_flag, slice_qs_delta) =
-            if slice_type == SliceType::SP || slice_type == SliceType::SI {
-                let sp_flag = if slice_type == SliceType::SP {
-                    Some(reader.read_bit()?)
-                } else {
-                    None
-                };
-                let qs_delta = reader.read_se()?;
-
-                (sp_flag, Some(qs_delta))
+        let (sp_for_switch_flag, slice_qs_delta) = if matches!(st, SliceType::SP | SliceType::SI) {
+            let sp_flag = if st == SliceType::SP {
+                Some(reader.read_bit()?)
             } else {
-                (None, None)
+                None
             };
+            let qs_delta = reader.read_se()?;
+
+            (sp_flag, Some(qs_delta))
+        } else {
+            (None, None)
+        };
 
         let deblocking_filter = if pps.deblocking_filter_control_present_flag {
             let disable_deblocking_filter_idc = reader.read_ue()?;
@@ -647,6 +930,9 @@ impl SliceHeader {
                     slice_group_change_rate_minus1,
                     ..
                 }) => {
+                    // PicSizeInMapUnits = PicWidthInMbs * PicHeightInMapUnits
+                    //                   = (ic_width_in_mbs_minus1 + 1) * pic_height_in_map_units_minus1 + 1
+                    // SliceGroupChangeRate = slice_group_change_rate_minus1 + 1
                     // bit width = Ceil(Log2(PicSizeInMapUnits / SliceGroupChangeRate + 1))
                     let pic_size_in_map_units = (sps.pic_width_in_mbs_minus1 + 1)
                         * (sps.pic_height_in_map_units_minus1 + 1);

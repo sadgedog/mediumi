@@ -182,8 +182,7 @@ impl NalUnit {
         while i < data.len() {
             if i + 2 < data.len() && data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] <= 0x03 {
                 buf.extend_from_slice(&[0x00, 0x00, 0x03]);
-                buf.push(data[i + 2]);
-                i += 3;
+                i += 2;
             } else {
                 buf.push(data[i]);
                 i += 1;
