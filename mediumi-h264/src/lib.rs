@@ -27,6 +27,7 @@ pub mod slice_b;
 pub mod slice_c;
 pub mod slice_header;
 pub mod sps;
+pub mod sps_ext;
 pub mod util;
 
 use crate::{
@@ -43,6 +44,7 @@ use crate::{
     slice_b::SliceB,
     slice_c::SliceC,
     sps::Sps,
+    sps_ext::SpsExt,
 };
 
 #[derive(Debug)]
@@ -58,7 +60,8 @@ pub enum NalData {
     Aud(StartCode, u8, Aud),
     EOSeq(StartCode, u8),
     EOStream(StartCode, u8),
-    FillerData(StartCode, u8, filler_data::FillerData),
+    FillerData(StartCode, u8, FillerData),
+    SpsExt(StartCode, u8, SpsExt),
     Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
 }
 
@@ -166,6 +169,13 @@ impl Processor {
                         &filler.to_bytes(),
                     ));
                 }
+                NalData::SpsExt(sc, nri, sps_ext) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::SPSExt));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &sps_ext.to_bytes(),
+                    ));
+                }
                 NalData::Raw(sc, nri, nal_type, rbsp) => {
                     buf.extend_from_slice(sc.as_bytes());
                     buf.push(nri << 5 | u8::from(nal_type));
@@ -271,6 +281,11 @@ impl Processor {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let filler = FillerData::parse(&rbsp);
                     nal_units.push(NalData::FillerData(sc, nri, filler));
+                }
+                NalUnitType::SPSExt => {
+                    let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                    let sps_ext = SpsExt::parse(&rbsp)?;
+                    nal_units.push(NalData::SpsExt(sc, nri, sps_ext));
                 }
                 NalUnitType::Unknown(v) => {
                     return Err(Error::InvalidNalUnitType(v));

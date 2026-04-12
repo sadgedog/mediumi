@@ -86,6 +86,12 @@ fn main() {
                     i, sc, nri, filler.ff_byte_count
                 );
             }
+            NalData::SpsExt(sc, nri, sps_ext) => {
+                println!(
+                    "[{}] Type: SPSExt, StartCode: {:?}, NRI: {}, SpsExt: {:?}",
+                    i, sc, nri, sps_ext
+                );
+            }
             NalData::Raw(_, nri, nal_type, rbsp) => {
                 println!(
                     "[{}] Type: {:?}, NRI: {}, RBSP size: {} bytes",

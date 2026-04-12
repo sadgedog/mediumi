@@ -14,6 +14,8 @@ pub enum Error {
     InvalidSliceType(SliceType),
     InvalidModificationOfPicNumsIdc(u32),
     InvalidMemoryManagementControlOp(u32),
+    InvalidBitDepthAuxMinus8(u32),
+    InvalidAuxFormatIdc(u32),
 }
 
 impl std::fmt::Display for Error {
@@ -56,6 +58,12 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidMemoryManagementControlOp(val) => {
                 write!(f, "Invalid memory_management_control_operation: {}", val)
+            }
+            Error::InvalidBitDepthAuxMinus8(val) => {
+                write!(f, "Invalid Bit Depth Aux Minus8: {}", val)
+            }
+            Error::InvalidAuxFormatIdc(val) => {
+                write!(f, "Invalid Aux Format Idc: {}", val)
             }
         }
     }
