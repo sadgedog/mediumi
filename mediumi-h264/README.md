@@ -3,6 +3,11 @@
 ## About this
 mediumi-h264 is an H.264 parser and serializer.
 
+## Scope and limitations
+This crate **DOES NOT** provide any H.264 encoder or decoder implementation.
+It only parses and serializes the H.264 bitstream syntax (NAL unit structure,
+SPS / PPS / slice header fields, etc...).
+
 ## Build
 ```sh
 $ cargo build -p mediumi-h264
