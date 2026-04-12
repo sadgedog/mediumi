@@ -22,6 +22,9 @@ pub mod nal;
 pub mod non_idr;
 pub mod pps;
 pub mod sei;
+pub mod slice_a;
+pub mod slice_b;
+pub mod slice_c;
 pub mod slice_header;
 pub mod sps;
 pub mod util;
@@ -36,12 +39,18 @@ use crate::{
     non_idr::NonIDR,
     pps::Pps,
     sei::Sei,
+    slice_a::SliceA,
+    slice_b::SliceB,
+    slice_c::SliceC,
     sps::Sps,
 };
 
 #[derive(Debug)]
 pub enum NalData {
     NonIdr(StartCode, u8, Box<NonIDR>),
+    SliceA(StartCode, u8, Box<SliceA>),
+    SliceB(StartCode, u8, Box<SliceB>),
+    SliceC(StartCode, u8, Box<SliceC>),
     Idr(StartCode, u8, Box<IDR>),
     Sei(StartCode, u8, Box<Sei>),
     Sps(StartCode, u8, Box<Sps>),
@@ -60,7 +69,7 @@ pub struct Processor {
 
 impl Processor {
     /// Write codec data
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut buf = Vec::new();
         let mut last_sps: Option<&Sps> = None;
         let mut last_pps: Option<&Pps> = None;
@@ -72,7 +81,34 @@ impl Processor {
                         buf.extend_from_slice(sc.as_bytes());
                         buf.push(nri << 5 | u8::from(&NalUnitType::NonIDR));
                         buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
-                            &non_idr.to_bytes(sps, pps).unwrap(),
+                            &non_idr.to_bytes(sps, pps)?,
+                        ));
+                    }
+                }
+                NalData::SliceA(sc, nri, slice_a) => {
+                    if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
+                        buf.extend_from_slice(sc.as_bytes());
+                        buf.push(nri << 5 | u8::from(&NalUnitType::SliceA));
+                        buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                            &slice_a.to_bytes(sps, pps)?,
+                        ));
+                    }
+                }
+                NalData::SliceB(sc, nri, slice_b) => {
+                    if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
+                        buf.extend_from_slice(sc.as_bytes());
+                        buf.push(nri << 5 | u8::from(&NalUnitType::SliceB));
+                        buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                            &slice_b.to_bytes(sps, pps)?,
+                        ));
+                    }
+                }
+                NalData::SliceC(sc, nri, slice_c) => {
+                    if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
+                        buf.extend_from_slice(sc.as_bytes());
+                        buf.push(nri << 5 | u8::from(&NalUnitType::SliceC));
+                        buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                            &slice_c.to_bytes(sps, pps)?,
                         ));
                     }
                 }
@@ -81,7 +117,7 @@ impl Processor {
                         buf.extend_from_slice(sc.as_bytes());
                         buf.push(nri << 5 | u8::from(&NalUnitType::IDR));
                         buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
-                            &idr.to_bytes(sps, pps).unwrap(),
+                            &idr.to_bytes(sps, pps)?,
                         ));
                     }
                 }
@@ -137,7 +173,8 @@ impl Processor {
                 }
             }
         }
-        buf
+
+        Ok(buf)
     }
 
     /// parse codec for 1 PES
@@ -158,6 +195,33 @@ impl Processor {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                         let non_idr = NonIDR::parse(&rbsp, sps, pps, nri)?;
                         nal_units.push(NalData::NonIdr(sc, nri, Box::new(non_idr)));
+                    } else {
+                        nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                    }
+                }
+                NalUnitType::SliceA => {
+                    if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
+                        let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                        let slice_a = SliceA::parse(&rbsp, sps, pps, nri)?;
+                        nal_units.push(NalData::SliceA(sc, nri, Box::new(slice_a)));
+                    } else {
+                        nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                    }
+                }
+                NalUnitType::SliceB => {
+                    if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
+                        let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                        let slice_b = SliceB::parse(&rbsp, sps, pps)?;
+                        nal_units.push(NalData::SliceB(sc, nri, Box::new(slice_b)));
+                    } else {
+                        nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                    }
+                }
+                NalUnitType::SliceC => {
+                    if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
+                        let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                        let slice_c = SliceC::parse(&rbsp, sps, pps)?;
+                        nal_units.push(NalData::SliceC(sc, nri, Box::new(slice_c)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }

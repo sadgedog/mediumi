@@ -10,7 +10,7 @@ fn main() {
     // parse
     let result = Processor::parse(&input).expect("failed to parse");
     // write
-    let output = result.to_bytes();
+    let output = result.to_bytes().unwrap();
 
     // length check
     assert_eq!(

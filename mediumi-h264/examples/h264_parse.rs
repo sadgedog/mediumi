@@ -23,6 +23,24 @@ fn main() {
                     i, sc, nri, non_idr.slice_header
                 );
             }
+            NalData::SliceA(sc, nri, slice_a) => {
+                println!(
+                    "[{}] Type: SliceA, StartCode: {:?}, NRI: {}, slice_id: {}",
+                    i, sc, nri, slice_a.slice_id
+                );
+            }
+            NalData::SliceB(sc, nri, slice_b) => {
+                println!(
+                    "[{}] Type: SliceB, StartCode: {:?}, NRI: {}, slice_id: {}",
+                    i, sc, nri, slice_b.slice_id
+                );
+            }
+            NalData::SliceC(sc, nri, slice_c) => {
+                println!(
+                    "[{}] Type: SliceC, StartCode: {:?}, NRI: {}, slice_id: {}",
+                    i, sc, nri, slice_c.slice_id
+                );
+            }
             NalData::Idr(sc, nri, idr) => {
                 println!(
                     "[{}] Type: IDR, StartCode: {:?}, NRI: {}, SliceHeader: {:?}",
