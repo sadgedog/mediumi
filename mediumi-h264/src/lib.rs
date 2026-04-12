@@ -21,6 +21,7 @@ pub mod idr;
 pub mod nal;
 pub mod non_idr;
 pub mod pps;
+pub mod sei;
 pub mod slice_header;
 pub mod sps;
 pub mod util;
@@ -34,6 +35,7 @@ use crate::{
     nal::{NalUnit, NalUnitType},
     non_idr::NonIDR,
     pps::Pps,
+    sei::Sei,
     sps::Sps,
 };
 
@@ -41,6 +43,7 @@ use crate::{
 pub enum NalData {
     NonIdr(StartCode, u8, Box<NonIDR>),
     Idr(StartCode, u8, Box<IDR>),
+    Sei(StartCode, u8, Box<Sei>),
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
     Aud(StartCode, u8, Aud),
@@ -81,6 +84,13 @@ impl Processor {
                             &idr.to_bytes(sps, pps).unwrap(),
                         ));
                     }
+                }
+                NalData::Sei(sc, nri, sei) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(&NalUnitType::SEI));
+                    buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
+                        &sei.to_bytes(),
+                    ));
                 }
                 NalData::Sps(sc, nri, sps) => {
                     last_sps = Some(sps);
@@ -160,6 +170,11 @@ impl Processor {
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
+                }
+                NalUnitType::SEI => {
+                    let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
+                    let sei = Sei::parse(&rbsp)?;
+                    nal_units.push(NalData::Sei(sc, nri, Box::new(sei)));
                 }
                 NalUnitType::SPS => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);

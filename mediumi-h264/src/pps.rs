@@ -1,4 +1,4 @@
-//! PPS (Picture Parameter Set) parser
+//! PPS (Picture Parameter Set)
 //!
 //! RBSP data when nal_unit_type = 8 (PPS)
 //! All fields below profile/level are encoded using Exp-Golomb coding

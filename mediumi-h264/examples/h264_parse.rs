@@ -29,6 +29,15 @@ fn main() {
                     i, sc, nri, idr.slice_header
                 );
             }
+            NalData::Sei(sc, nri, sei) => {
+                println!(
+                    "[{}] Type: SEI, StartCode: {:?}, NRI: {}, messages: {}",
+                    i,
+                    sc,
+                    nri,
+                    sei.sei_message.len()
+                );
+            }
             NalData::Sps(sc, nri, sps) => {
                 println!(
                     "[{}] Type: SPS, StartCode: {:?}, NRI: {}, SPS: {:?}",
