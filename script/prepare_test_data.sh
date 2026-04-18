@@ -31,7 +31,7 @@ ffmpeg -y -f lavfi -i sine=frequency=440:duration=3:sample_rate=44100 \
 # H.264
 echo "Generating test.h264 ..."
 ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 \
-    -c:v libx264 -f h264 \
+    -c:v libx264 -x264-params aud=1 -f h264 \
     "$ROOT_DIR/mediumi-h264/examples/data/test.h264"
 
 # MPEG2-TS

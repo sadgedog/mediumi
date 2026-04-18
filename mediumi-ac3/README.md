@@ -3,6 +3,11 @@
 ## About this
 mediumi-ac3 is an AC-3 (A/52) parser and serializer.
 
+## Scope and limitations
+This crate **DOES NOT** provide any AC-3 encoder or decoder implementation.
+It only parses and serializes the AC-3 bitstream syntax (sync info, BSI,
+audio block headers, etc...).
+
 ## Build
 ```sh
 $ cargo build -p mediumi-ac3

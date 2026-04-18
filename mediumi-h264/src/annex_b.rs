@@ -120,7 +120,7 @@ mod tests {
         let data = [0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB];
         let result = AnnexB::parse(&data).unwrap();
         assert_eq!(result.start_code, StartCode::ThreeBytes);
-        assert_eq!(result.nal_unit.header.nal_unit_type, NalUnitType::IDR);
+        assert_eq!(result.nal_unit.header.nal_unit_type, NalUnitType::Idr);
         assert_eq!(result.nal_unit.header.nal_ref_idc, 3);
         assert_eq!(result.nal_unit.rbsp, vec![0xAA, 0xBB]);
     }
@@ -130,7 +130,7 @@ mod tests {
         let data = [0x00, 0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB];
         let result = AnnexB::parse(&data).unwrap();
         assert_eq!(result.start_code, StartCode::FourBytes);
-        assert_eq!(result.nal_unit.header.nal_unit_type, NalUnitType::IDR);
+        assert_eq!(result.nal_unit.header.nal_unit_type, NalUnitType::Idr);
         assert_eq!(result.nal_unit.header.nal_ref_idc, 3);
         assert_eq!(result.nal_unit.rbsp, vec![0xAA, 0xBB]);
     }

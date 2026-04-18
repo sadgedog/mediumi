@@ -1,4 +1,4 @@
-//! SPS (Sequence Parameter Set) parser
+//! SPS (Sequence Parameter Set)
 //!
 //! RBSP data when nal_unit_type = 7 (SPS)
 //! All fields below profile/level are encoded using Exp-Golomb coding

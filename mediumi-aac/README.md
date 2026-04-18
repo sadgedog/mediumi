@@ -3,6 +3,11 @@
 ## About this
 mediumi-aac is an AAC (ADTS) parser and serializer.
 
+## Scope and limitations
+This crate **DOES NOT** provide any AAC encoder or decoder implementation.
+It only parses and serializes the ADTS bitstream syntax (header fields,
+frame structure, etc...).
+
 ## Build
 ```sh
 $ cargo build -p mediumi-aac
