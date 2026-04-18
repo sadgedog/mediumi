@@ -33,3 +33,10 @@ test-h264:
 
 test-mpeg2ts:
 	cargo test -p mediumi-mpeg2ts
+
+test-roundtrip:
+	./script/prepare_test_data.sh \
+		&& cargo run --example adts_roundtrip \
+		&& cargo run --example ac3_roundtrip \
+		&& cargo run --example h264_roundtrip \
+		&& ./script/cleanup_test_data.sh

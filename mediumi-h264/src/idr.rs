@@ -8,13 +8,13 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct IDR {
+pub struct Idr {
     pub slice_header: SliceHeader,
     pub slice_data: Vec<u8>,
     pub slice_data_bit_offset: u8,
 }
 
-impl IDR {
+impl Idr {
     pub fn to_bytes(&self, sps: &Sps, pps: &Pps) -> Result<Vec<u8>, Error> {
         let mut writer = BitstreamWriter::new();
         self.slice_header.to_bytes(&mut writer, sps, pps)?;
@@ -25,7 +25,7 @@ impl IDR {
     pub fn parse(data: &[u8], sps: &Sps, pps: &Pps, nal_ref_idc: u8) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
         let slice_header =
-            SliceHeader::parse(&mut reader, sps, pps, NalUnitType::IDR, nal_ref_idc)?;
+            SliceHeader::parse(&mut reader, sps, pps, NalUnitType::Idr, nal_ref_idc)?;
         let (slice_data, slice_data_bit_offset) = reader.read_remaining_bytes();
 
         Ok(Self {

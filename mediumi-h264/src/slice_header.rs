@@ -730,7 +730,7 @@ impl SliceHeader {
         nal_unit_type: NalUnitType,
         nal_ref_idc: u8,
     ) -> Result<Self, Error> {
-        let is_idr = nal_unit_type == NalUnitType::IDR;
+        let is_idr = nal_unit_type == NalUnitType::Idr;
 
         let first_mb_in_slice = reader.read_ue()?;
         let slice_type = reader.read_ue()?;
@@ -761,7 +761,7 @@ impl SliceHeader {
             None
         };
 
-        let idr_pic_id = if nal_unit_type == NalUnitType::IDR {
+        let idr_pic_id = if nal_unit_type == NalUnitType::Idr {
             Some(reader.read_ue()?)
         } else {
             None

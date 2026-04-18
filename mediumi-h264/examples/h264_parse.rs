@@ -92,7 +92,16 @@ fn main() {
                     i, sc, nri, sps_ext
                 );
             }
-            NalData::Raw(_, nri, nal_type, rbsp) => {
+            NalData::Raw(_, nri, nal_type, rbsp)
+            | NalData::Unspecified(_, nri, nal_type, rbsp)
+            | NalData::PrefixNalUnit(_, nri, nal_type, rbsp)
+            | NalData::SubsetSps(_, nri, nal_type, rbsp)
+            | NalData::Dps(_, nri, nal_type, rbsp)
+            | NalData::Reserved(_, nri, nal_type, rbsp)
+            | NalData::Aux(_, nri, nal_type, rbsp)
+            | NalData::SliceExt(_, nri, nal_type, rbsp)
+            | NalData::DepthExt(_, nri, nal_type, rbsp)
+            | NalData::Unknown(_, nri, nal_type, rbsp) => {
                 println!(
                     "[{}] Type: {:?}, NRI: {}, RBSP size: {} bytes",
                     i,

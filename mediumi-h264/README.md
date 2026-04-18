@@ -34,22 +34,14 @@ $ cargo run --example h264_roundtrip
 
 ## Out of scope
 - Specific NAL Unit Type
-    - NonIDR
-    - SliceA
-    - SliceB
-    - SliceC
-    - IDR
-    - SEI
-    - EOSeq
-    - EOStream
-    - FillerData
-    - SPSExt
-    - PrefixNalUnit
-    - SubsetSPS
-    - DPS
-    - AUX
-    - SliceExt
-    - DepthExt
+    - [ ] PrefixNalUnit
+    - [ ] SubsetSPS
+    - [ ] DPS
+    - [ ] Reserved
+    - [ ] AUX
+    - [ ] SliceExt
+    - [ ] DepthExt
+
 
 ## Status
 This project is under active development. APIs may change without notice.

@@ -35,9 +35,9 @@ use crate::{
     aud::Aud,
     error::Error,
     filler_data::FillerData,
-    idr::IDR,
+    idr::Idr,
     nal::{NalUnit, NalUnitType},
-    non_idr::NonIDR,
+    non_idr::NonIdr,
     pps::Pps,
     sei::Sei,
     slice_a::SliceA,
@@ -49,11 +49,12 @@ use crate::{
 
 #[derive(Debug)]
 pub enum NalData {
-    NonIdr(StartCode, u8, Box<NonIDR>),
+    Unspecified(StartCode, u8, NalUnitType, Vec<u8>), // not implemented, raw data
+    NonIdr(StartCode, u8, Box<NonIdr>),
     SliceA(StartCode, u8, Box<SliceA>),
     SliceB(StartCode, u8, Box<SliceB>),
     SliceC(StartCode, u8, Box<SliceC>),
-    Idr(StartCode, u8, Box<IDR>),
+    Idr(StartCode, u8, Box<Idr>),
     Sei(StartCode, u8, Box<Sei>),
     Sps(StartCode, u8, Box<Sps>),
     Pps(StartCode, u8, Box<Pps>),
@@ -62,7 +63,15 @@ pub enum NalData {
     EOStream(StartCode, u8),
     FillerData(StartCode, u8, FillerData),
     SpsExt(StartCode, u8, SpsExt),
-    Raw(StartCode, u8, NalUnitType, Vec<u8>), // start_code, nal_ref_idc, type, rbsp
+    PrefixNalUnit(StartCode, u8, NalUnitType, Vec<u8>), // not implemented, raw data
+    SubsetSps(StartCode, u8, NalUnitType, Vec<u8>),     // not implemented, raw data
+    Dps(StartCode, u8, NalUnitType, Vec<u8>),           // not implemented, raw data
+    Reserved(StartCode, u8, NalUnitType, Vec<u8>),      // not implemented, raw data
+    Aux(StartCode, u8, NalUnitType, Vec<u8>),           // not implemented, raw data
+    SliceExt(StartCode, u8, NalUnitType, Vec<u8>),      // not implemented, raw data
+    DepthExt(StartCode, u8, NalUnitType, Vec<u8>),      // not implemented, raw data
+    Unknown(StartCode, u8, NalUnitType, Vec<u8>),       // not implemented, raw data
+    Raw(StartCode, u8, NalUnitType, Vec<u8>),           // start_code, nal_ref_idc, type, rbsp
 }
 
 #[derive(Debug)]
@@ -79,10 +88,15 @@ impl Processor {
 
         for nal in &self.nal_units {
             match nal {
+                NalData::Unspecified(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
                 NalData::NonIdr(sc, nri, non_idr) => {
                     if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
                         buf.extend_from_slice(sc.as_bytes());
-                        buf.push(nri << 5 | u8::from(&NalUnitType::NonIDR));
+                        buf.push(nri << 5 | u8::from(&NalUnitType::NonIdr));
                         buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                             &non_idr.to_bytes(sps, pps)?,
                         ));
@@ -118,7 +132,7 @@ impl Processor {
                 NalData::Idr(sc, nri, idr) => {
                     if let (Some(sps), Some(pps)) = (last_sps, last_pps) {
                         buf.extend_from_slice(sc.as_bytes());
-                        buf.push(nri << 5 | u8::from(&NalUnitType::IDR));
+                        buf.push(nri << 5 | u8::from(&NalUnitType::Idr));
                         buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                             &idr.to_bytes(sps, pps)?,
                         ));
@@ -126,7 +140,7 @@ impl Processor {
                 }
                 NalData::Sei(sc, nri, sei) => {
                     buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::SEI));
+                    buf.push(nri << 5 | u8::from(&NalUnitType::Sei));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &sei.to_bytes(),
                     ));
@@ -134,7 +148,7 @@ impl Processor {
                 NalData::Sps(sc, nri, sps) => {
                     last_sps = Some(sps);
                     buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::SPS));
+                    buf.push(nri << 5 | u8::from(&NalUnitType::Sps));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &sps.to_bytes(),
                     ));
@@ -142,14 +156,14 @@ impl Processor {
                 NalData::Pps(sc, nri, pps) => {
                     last_pps = Some(pps);
                     buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::PPS));
+                    buf.push(nri << 5 | u8::from(&NalUnitType::Pps));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &pps.to_bytes(),
                     ));
                 }
                 NalData::Aud(sc, nri, aud) => {
                     buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::AUD));
+                    buf.push(nri << 5 | u8::from(&NalUnitType::Aud));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &aud.to_bytes(),
                     ));
@@ -171,10 +185,50 @@ impl Processor {
                 }
                 NalData::SpsExt(sc, nri, sps_ext) => {
                     buf.extend_from_slice(sc.as_bytes());
-                    buf.push(nri << 5 | u8::from(&NalUnitType::SPSExt));
+                    buf.push(nri << 5 | u8::from(&NalUnitType::SpsExt));
                     buf.extend_from_slice(&NalUnit::attach_emulation_prevention_bytes(
                         &sps_ext.to_bytes(),
                     ));
+                }
+                NalData::PrefixNalUnit(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::SubsetSps(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::Dps(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::Reserved(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::Aux(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::SliceExt(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::DepthExt(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
+                }
+                NalData::Unknown(sc, nri, nal_type, rbsp) => {
+                    buf.extend_from_slice(sc.as_bytes());
+                    buf.push(nri << 5 | u8::from(nal_type));
+                    buf.extend_from_slice(rbsp);
                 }
                 NalData::Raw(sc, nri, nal_type, rbsp) => {
                     buf.extend_from_slice(sc.as_bytes());
@@ -200,10 +254,13 @@ impl Processor {
             let nal_type = ab.nal_unit.header.nal_unit_type;
 
             match nal_type {
-                NalUnitType::NonIDR => {
+                NalUnitType::Unspecified(_) => {
+                    nal_units.push(NalData::Unspecified(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::NonIdr => {
                     if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
-                        let non_idr = NonIDR::parse(&rbsp, sps, pps, nri)?;
+                        let non_idr = NonIdr::parse(&rbsp, sps, pps, nri)?;
                         nal_units.push(NalData::NonIdr(sc, nri, Box::new(non_idr)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
@@ -236,27 +293,27 @@ impl Processor {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
                 }
-                NalUnitType::IDR => {
+                NalUnitType::Idr => {
                     if let (Some(sps), Some(pps)) = (&last_sps, &last_pps) {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
-                        let idr = IDR::parse(&rbsp, sps, pps, nri)?;
+                        let idr = Idr::parse(&rbsp, sps, pps, nri)?;
                         nal_units.push(NalData::Idr(sc, nri, Box::new(idr)));
                     } else {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
                 }
-                NalUnitType::SEI => {
+                NalUnitType::Sei => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let sei = Sei::parse(&rbsp)?;
                     nal_units.push(NalData::Sei(sc, nri, Box::new(sei)));
                 }
-                NalUnitType::SPS => {
+                NalUnitType::Sps => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let sps = Sps::parse(&rbsp)?;
                     last_sps = Some(sps.clone());
                     nal_units.push(NalData::Sps(sc, nri, Box::new(sps)));
                 }
-                NalUnitType::PPS => {
+                NalUnitType::Pps => {
                     if let Some(sps) = &last_sps {
                         let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                         let pps = Pps::parse(&rbsp, sps)?;
@@ -266,7 +323,7 @@ impl Processor {
                         nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
                     }
                 }
-                NalUnitType::AUD => {
+                NalUnitType::Aud => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let aud = Aud::parse(&rbsp)?;
                     nal_units.push(NalData::Aud(sc, nri, aud));
@@ -282,16 +339,34 @@ impl Processor {
                     let filler = FillerData::parse(&rbsp);
                     nal_units.push(NalData::FillerData(sc, nri, filler));
                 }
-                NalUnitType::SPSExt => {
+                NalUnitType::SpsExt => {
                     let rbsp = NalUnit::remove_emulation_prevention_bytes(&ab.nal_unit.rbsp);
                     let sps_ext = SpsExt::parse(&rbsp)?;
                     nal_units.push(NalData::SpsExt(sc, nri, sps_ext));
                 }
-                NalUnitType::Unknown(v) => {
-                    return Err(Error::InvalidNalUnitType(v));
+                NalUnitType::PrefixNalUnit => {
+                    nal_units.push(NalData::PrefixNalUnit(sc, nri, nal_type, ab.nal_unit.rbsp));
                 }
-                _ => {
-                    nal_units.push(NalData::Raw(sc, nri, nal_type, ab.nal_unit.rbsp));
+                NalUnitType::SubsetSps => {
+                    nal_units.push(NalData::SubsetSps(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::Dps => {
+                    nal_units.push(NalData::Dps(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::Reserved(_) => {
+                    nal_units.push(NalData::Reserved(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::Aux => {
+                    nal_units.push(NalData::Aux(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::SliceExt => {
+                    nal_units.push(NalData::SliceExt(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::DepthExt => {
+                    nal_units.push(NalData::DepthExt(sc, nri, nal_type, ab.nal_unit.rbsp));
+                }
+                NalUnitType::Unknown(_) => {
+                    nal_units.push(NalData::Unknown(sc, nri, nal_type, ab.nal_unit.rbsp));
                 }
             }
         }

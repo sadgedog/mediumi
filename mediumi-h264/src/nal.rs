@@ -23,24 +23,24 @@ use crate::error::Error;
 #[derive(Debug, PartialEq)]
 pub enum NalUnitType {
     Unspecified(u8), // 0, 24..31
-    NonIDR,          // 1
+    NonIdr,          // 1
     SliceA,          // 2
     SliceB,          // 3
     SliceC,          // 4
-    IDR,             // 5
-    SEI,             // 6: Supplemental Enhancement Information
-    SPS,             // 7: Sequence Parameter Set
-    PPS,             // 8: Picture Parameter Set
-    AUD,             // 9: Access Unit Delimiter
+    Idr,             // 5
+    Sei,             // 6: Supplemental Enhancement Information
+    Sps,             // 7: Sequence Parameter Set
+    Pps,             // 8: Picture Parameter Set
+    Aud,             // 9: Access Unit Delimiter
     EOSeq,           // 10: End Of Sequence
     EOStream,        // 11: End Of Stream
     FillerData,      // 12
-    SPSExt,          // 13: SPS Extension
+    SpsExt,          // 13: SPS Extension
     PrefixNalUnit,   // 14
-    SubsetSPS,       // 15
-    DPS,             // 16: Depth Parameter Set
+    SubsetSps,       // 15
+    Dps,             // 16: Depth Parameter Set
     Reserved(u8),    // 17..18, 22..23
-    AUX,             // 19: Auxiliary Picture
+    Aux,             // 19: Auxiliary Picture
     SliceExt,        // 20
     DepthExt,        // 21
     Unknown(u8),     // other invalid NAL Unit Type
@@ -50,24 +50,24 @@ impl From<u8> for NalUnitType {
     fn from(value: u8) -> NalUnitType {
         match value {
             0 | 24..=31 => NalUnitType::Unspecified(value),
-            1 => NalUnitType::NonIDR,
+            1 => NalUnitType::NonIdr,
             2 => NalUnitType::SliceA,
             3 => NalUnitType::SliceB,
             4 => NalUnitType::SliceC,
-            5 => NalUnitType::IDR,
-            6 => NalUnitType::SEI,
-            7 => NalUnitType::SPS,
-            8 => NalUnitType::PPS,
-            9 => NalUnitType::AUD,
+            5 => NalUnitType::Idr,
+            6 => NalUnitType::Sei,
+            7 => NalUnitType::Sps,
+            8 => NalUnitType::Pps,
+            9 => NalUnitType::Aud,
             10 => NalUnitType::EOSeq,
             11 => NalUnitType::EOStream,
             12 => NalUnitType::FillerData,
-            13 => NalUnitType::SPSExt,
+            13 => NalUnitType::SpsExt,
             14 => NalUnitType::PrefixNalUnit,
-            15 => NalUnitType::SubsetSPS,
-            16 => NalUnitType::DPS,
+            15 => NalUnitType::SubsetSps,
+            16 => NalUnitType::Dps,
             17..=18 | 22..=23 => NalUnitType::Reserved(value),
-            19 => NalUnitType::AUX,
+            19 => NalUnitType::Aux,
             20 => NalUnitType::SliceExt,
             21 => NalUnitType::DepthExt,
             _ => NalUnitType::Unknown(value),
@@ -79,24 +79,24 @@ impl From<&NalUnitType> for u8 {
     fn from(value: &NalUnitType) -> u8 {
         match value {
             NalUnitType::Unspecified(v) => *v,
-            NalUnitType::NonIDR => 1,
+            NalUnitType::NonIdr => 1,
             NalUnitType::SliceA => 2,
             NalUnitType::SliceB => 3,
             NalUnitType::SliceC => 4,
-            NalUnitType::IDR => 5,
-            NalUnitType::SEI => 6,
-            NalUnitType::SPS => 7,
-            NalUnitType::PPS => 8,
-            NalUnitType::AUD => 9,
+            NalUnitType::Idr => 5,
+            NalUnitType::Sei => 6,
+            NalUnitType::Sps => 7,
+            NalUnitType::Pps => 8,
+            NalUnitType::Aud => 9,
             NalUnitType::EOSeq => 10,
             NalUnitType::EOStream => 11,
             NalUnitType::FillerData => 12,
-            NalUnitType::SPSExt => 13,
+            NalUnitType::SpsExt => 13,
             NalUnitType::PrefixNalUnit => 14,
-            NalUnitType::SubsetSPS => 15,
-            NalUnitType::DPS => 16,
+            NalUnitType::SubsetSps => 15,
+            NalUnitType::Dps => 16,
             NalUnitType::Reserved(v) => *v,
-            NalUnitType::AUX => 19,
+            NalUnitType::Aux => 19,
             NalUnitType::SliceExt => 20,
             NalUnitType::DepthExt => 21,
             NalUnitType::Unknown(v) => *v,
@@ -201,7 +201,7 @@ mod tests {
         let data = [0x65, 0xAA, 0xBB];
         let result = NalUnit::parse(&data).unwrap();
         assert_eq!(result.header.nal_ref_idc, 3);
-        assert_eq!(result.header.nal_unit_type, NalUnitType::IDR);
+        assert_eq!(result.header.nal_unit_type, NalUnitType::Idr);
         assert_eq!(result.header.nal_ref_idc, 3);
         assert_eq!(result.rbsp, vec![0xAA, 0xBB]);
     }

@@ -52,3 +52,7 @@ $ make test-mpeg2ts
 
 ## Status
 This project is under active development. APIs may change without notice.
+
+## Contributing
+Contributions are welcome. \
+If you find a bug, have a feature request, or want to improve the implementation, please open an [issue](https://github.com/sadgedog/mediumi/issues) or submit a [pull request](https://github.com/sadgedog/mediumi/pulls).
