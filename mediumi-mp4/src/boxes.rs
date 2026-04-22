@@ -4,6 +4,7 @@ pub mod mdat;
 pub mod mfhd;
 pub mod moof;
 pub mod sbgp;
+pub mod sgpd;
 pub mod tfdt;
 pub mod tfhd;
 pub mod traf;
@@ -11,8 +12,8 @@ pub mod trun;
 
 use crate::{
     boxes::{
-        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, sbgp::Sbgp, tfdt::Tfdt,
-        tfhd::Tfhd, traf::Traf, trun::Trun,
+        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, sbgp::Sbgp, sgpd::Sgpd,
+        tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -184,6 +185,7 @@ pub enum Mp4Box {
     Tfhd(Tfhd),
     Trun(Trun),
     Sbgp(Sbgp),
+    Sgpd(Sgpd),
     Tfdt(Tfdt),
     Unknown(UnknownBox),
 }
@@ -211,6 +213,7 @@ impl Mp4Box {
             BoxType::Tfhd => Mp4Box::Tfhd(Tfhd::parse(body)?),
             BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
             BoxType::Sbgp => Mp4Box::Sbgp(Sbgp::parse(body)?),
+            BoxType::Sgpd => Mp4Box::Sgpd(Sgpd::parse(body)?),
             BoxType::Tfdt => Mp4Box::Tfdt(Tfdt::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),
@@ -231,6 +234,7 @@ impl Mp4Box {
             Mp4Box::Tfhd(b) => write_child_box(&mut writer, Tfhd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Trun(b) => write_child_box(&mut writer, Trun::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Sbgp(b) => write_child_box(&mut writer, Sbgp::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Sgpd(b) => write_child_box(&mut writer, Sgpd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Tfdt(b) => write_child_box(&mut writer, Tfdt::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
@@ -268,7 +272,6 @@ impl<'a> Iterator for BoxIter<'a> {
                 Some(Ok((child, raw)))
             }
             Err(e) => {
-                // エラー後は以降 None を返して停止
                 self.offset = self.data.len();
                 Some(Err(e))
             }
