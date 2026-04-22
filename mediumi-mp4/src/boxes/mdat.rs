@@ -1,18 +1,24 @@
-use crate::{boxes::Error, util::bitstream::BitstreamWriter};
+use crate::{
+    boxes::{BaseBox, Error},
+    types::BoxType,
+    util::bitstream::BitstreamWriter,
+};
 
 #[derive(Debug)]
 pub struct Mdat {
     pub payload: Vec<u8>,
 }
 
-impl Mdat {
-    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+impl BaseBox for Mdat {
+    const BOX_TYPE: crate::types::BoxType = BoxType::Mdat;
+
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
         for b in &self.payload {
             writer.write_bits(*b as u32, 8);
         }
     }
 
-    pub fn parse(data: &[u8]) -> Result<Self, Error> {
+    fn parse(data: &[u8]) -> Result<Self, Error> {
         Ok(Self {
             payload: data.to_vec(),
         })

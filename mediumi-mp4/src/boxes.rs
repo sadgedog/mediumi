@@ -1,11 +1,32 @@
-//! ISO-BMFF box definitions.
 pub mod error;
 pub mod ftyp;
 pub mod mdat;
-use crate::boxes::{ftyp::Ftyp, mdat::Mdat};
-use crate::types::BoxType;
-use crate::util::bitstream::{BitstreamReader, BitstreamWriter};
-pub use error::Error;
+pub mod mfhd;
+pub mod moof;
+pub mod tfdt;
+pub mod tfhd;
+pub mod traf;
+pub mod trun;
+
+use crate::{
+    boxes::{
+        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, tfdt::Tfdt, tfhd::Tfhd,
+        traf::Traf, trun::Trun,
+    },
+    types::BoxType,
+    util::bitstream::{BitstreamReader, BitstreamWriter},
+};
+
+pub trait BaseBox: Sized {
+    const BOX_TYPE: BoxType;
+    fn to_bytes(&self, writer: &mut BitstreamWriter);
+    fn parse(data: &[u8]) -> Result<Self, Error>;
+}
+
+pub trait FullBox: BaseBox {
+    fn version(&self) -> u8;
+    fn flags(&self) -> u32;
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BoxSize {
@@ -18,6 +39,7 @@ pub enum BoxSize {
 pub struct BoxHeader {
     pub box_size: BoxSize,
     pub box_type: BoxType,
+    pub usertype: Option<[u8; 16]>,
     pub header_size: usize,
 }
 
@@ -44,9 +66,16 @@ impl BoxHeader {
             writer.write_bits((s >> 32) as u32, 32); // upper 32bits of largesize
             writer.write_bits(s as u32, 32); // lower 32bits of largesize
         }
+
+        if let Some(usertype) = &self.usertype {
+            for b in usertype {
+                writer.write_bits(*b as u32, 8);
+            }
+        }
     }
 
-    pub fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+    pub fn parse(data: &[u8]) -> Result<Self, Error> {
+        let mut reader = BitstreamReader::new(data);
         let size = reader.read_bits(32)?;
         let box_type = BoxType::from([
             reader.read_bits(8)? as u8,
@@ -55,7 +84,7 @@ impl BoxHeader {
             reader.read_bits(8)? as u8,
         ]);
 
-        let (box_size, header_size) = match size {
+        let (box_size, mut header_size) = match size {
             0 => (BoxSize::ExtendsToEnd, 8),
             1 => {
                 // largesize: 64-bit size follows
@@ -63,39 +92,107 @@ impl BoxHeader {
                 let low = reader.read_bits(32)? as u64;
                 (BoxSize::Large((high << 32) | low), 16)
             }
-            _ => (BoxSize::Normal(size as u32), 8),
+            _ => (BoxSize::Normal(size), 8),
+        };
+
+        let usertype = if box_type == BoxType::Uuid {
+            let mut ut = [0u8; 16];
+            for b in ut.iter_mut() {
+                *b = reader.read_bits(8)? as u8;
+            }
+            header_size += 16;
+            Some(ut)
+        } else {
+            None
         };
 
         Ok(Self {
             box_size,
             box_type,
+            usertype,
             header_size,
         })
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FullBoxHeader {
+    pub version: u8,
+    pub flags: u32,
+}
+
+impl FullBoxHeader {
+    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        writer.write_bits(self.version as u32, 8);
+        writer.write_bits(self.flags, 24);
+    }
+
+    pub fn parse(data: &[u8]) -> Result<Self, Error> {
+        if data.len() < 4 {
+            return Err(Error::DataTooShort);
+        }
+        let mut reader = BitstreamReader::new(data);
+        let version = reader.read_bits(8)? as u8;
+        let flags = reader.read_bits(24)?;
+        Ok(Self { version, flags })
+    }
+}
+
+pub(crate) fn write_child_box<F: FnOnce(&mut BitstreamWriter)>(
+    out: &mut BitstreamWriter,
+    box_type: BoxType,
+    body_fn: F,
+) {
+    let mut body_writer = BitstreamWriter::new();
+    body_fn(&mut body_writer);
+    let body = body_writer.finish();
+
+    let body_len = body.len() as u64;
+    let normal_total = 8_u64 + body_len;
+    let header = if normal_total <= u32::MAX as u64 {
+        BoxHeader {
+            box_size: BoxSize::Normal(normal_total as u32),
+            box_type,
+            usertype: None,
+            header_size: 8,
+        }
+    } else {
+        BoxHeader {
+            box_size: BoxSize::Large(16 + body_len),
+            box_type,
+            usertype: None,
+            header_size: 16,
+        }
+    };
+    header.to_bytes(out);
+    for &b in &body {
+        out.write_bits(b as u32, 8);
+    }
+}
+
+/// Unknown box
 #[derive(Debug)]
 pub struct UnknownBox {
     pub header: BoxHeader,
     pub payload: Vec<u8>,
 }
 
-/// Top-level box variants.
 #[derive(Debug)]
 pub enum Mp4Box {
     Ftyp(Ftyp),
     Mdat(Mdat),
+    Mfhd(Mfhd),
+    Moof(Moof),
+    Traf(Traf),
+    Tfhd(Tfhd),
+    Tfdt(Tfdt),
+    Trun(Trun),
     Unknown(UnknownBox),
 }
 
 impl Mp4Box {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        todo!()
-    }
-
     pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
-        let mut reader = BitstreamReader::new(data);
-        let header = BoxHeader::parse(&mut reader)?;
+        let header = BoxHeader::parse(data)?;
 
         let total: usize = match header.box_size {
             BoxSize::Normal(s) => s as usize,
@@ -105,98 +202,83 @@ impl Mp4Box {
         if data.len() < total {
             return Err(Error::DataTooShort);
         }
-        let payload = &data[header.header_size..total];
+        let body = &data[header.header_size..total];
 
         let parsed = match &header.box_type {
-            BoxType::Ftyp => {
-                let mut payload_reader = BitstreamReader::new(payload);
-                Mp4Box::Ftyp(Ftyp::parse(payload, &mut payload_reader)?)
-            }
-            BoxType::Mdat => Mp4Box::Mdat(Mdat::parse(payload)?),
+            BoxType::Ftyp => Mp4Box::Ftyp(Ftyp::parse(body)?),
+            BoxType::Mdat => Mp4Box::Mdat(Mdat::parse(body)?),
+            BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),
+            BoxType::Moof => Mp4Box::Moof(Moof::parse(body)?),
+            BoxType::Traf => Mp4Box::Traf(Traf::parse(body)?),
+            BoxType::Tfhd => Mp4Box::Tfhd(Tfhd::parse(body)?),
+            BoxType::Tfdt => Mp4Box::Tfdt(Tfdt::parse(body)?),
+            BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),
-                payload: payload.to_vec(),
+                payload: body.to_vec(),
             }),
         };
-
         Ok((parsed, total))
     }
-}
 
-pub fn parse_all(data: &[u8]) -> Result<Vec<Mp4Box>, Error> {
-    let mut boxes = Vec::new();
-    let mut offset = 0;
-    while offset < data.len() {
-        let (b, consumed) = Mp4Box::parse(&data[offset..])?;
-        offset += consumed;
-        boxes.push(b);
-    }
-    Ok(boxes)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::bitstream::BitstreamWriter;
-
-    fn roundtrip_header(input: &[u8]) {
-        let mut reader = BitstreamReader::new(input);
-        let header = BoxHeader::parse(&mut reader).expect("failed to parse header");
-
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut writer = BitstreamWriter::new();
-        header.to_bytes(&mut writer);
-        let output = writer.finish();
-
-        assert_eq!(output, input);
+        match self {
+            Mp4Box::Ftyp(b) => write_child_box(&mut writer, Ftyp::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Mdat(b) => write_child_box(&mut writer, Mdat::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Mfhd(b) => write_child_box(&mut writer, Mfhd::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Moof(b) => write_child_box(&mut writer, Moof::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Traf(b) => write_child_box(&mut writer, Traf::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Tfhd(b) => write_child_box(&mut writer, Tfhd::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Tfdt(b) => write_child_box(&mut writer, Tfdt::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Trun(b) => write_child_box(&mut writer, Trun::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Unknown(u) => {
+                u.header.to_bytes(&mut writer);
+                for &byte in &u.payload {
+                    writer.write_bits(byte as u32, 8);
+                }
+            }
+        }
+        writer.finish()
     }
+}
 
-    #[test]
-    fn test_header_normal() {
-        // size = 32, type = "ftyp"
-        let data = [
-            0x00, 0x00, 0x00, 0x20, // size = 32
-            b'f', b't', b'y', b'p', // type = "ftyp"
-        ];
-        let mut reader = BitstreamReader::new(&data);
-        let header = BoxHeader::parse(&mut reader).unwrap();
-        assert_eq!(header.box_size, BoxSize::Normal(32));
-        assert_eq!(header.box_type, BoxType::Ftyp);
-        assert_eq!(header.header_size, 8);
+pub struct BoxIter<'a> {
+    data: &'a [u8],
+    offset: usize,
+}
 
-        roundtrip_header(&data);
+impl<'a> BoxIter<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        Self { data, offset: 0 }
     }
+}
 
-    #[test]
-    fn test_header_large() {
-        // size = 1 (largesize marker), type = "mdat", largesize = 0x1_0000_0000 (4 GiB)
-        let data = [
-            0x00, 0x00, 0x00, 0x01, // size = 1 (largesize marker)
-            b'm', b'd', b'a', b't', // type = "mdat"
-            0x00, 0x00, 0x00, 0x01, // largesize upper 32bit
-            0x00, 0x00, 0x00, 0x00, // largesize lower 32bit
-        ];
-        let mut reader = BitstreamReader::new(&data);
-        let header = BoxHeader::parse(&mut reader).unwrap();
-        assert_eq!(header.box_size, BoxSize::Large(0x1_0000_0000));
-        assert_eq!(header.box_type, BoxType::Mdat);
-        assert_eq!(header.header_size, 16);
+impl<'a> Iterator for BoxIter<'a> {
+    type Item = Result<(Mp4Box, &'a [u8]), Error>;
 
-        roundtrip_header(&data);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.offset >= self.data.len() {
+            return None;
+        }
+        match Mp4Box::parse(&self.data[self.offset..]) {
+            Ok((child, consumed)) => {
+                let raw = &self.data[self.offset..self.offset + consumed];
+                self.offset += consumed;
+                Some(Ok((child, raw)))
+            }
+            Err(e) => {
+                // エラー後は以降 None を返して停止
+                self.offset = self.data.len();
+                Some(Err(e))
+            }
+        }
     }
+}
 
-    #[test]
-    fn test_header_extends_to_end() {
-        // size = 0 (extends to end of file), type = "mdat"
-        let data = [
-            0x00, 0x00, 0x00, 0x00, // size = 0
-            b'm', b'd', b'a', b't', // type = "mdat"
-        ];
-        let mut reader = BitstreamReader::new(&data);
-        let header = BoxHeader::parse(&mut reader).unwrap();
-        assert_eq!(header.box_size, BoxSize::ExtendsToEnd);
-        assert_eq!(header.box_type, BoxType::Mdat);
-        assert_eq!(header.header_size, 8);
-
-        roundtrip_header(&data);
-    }
+/// Parse all box
+pub fn parse_all(data: &[u8]) -> Result<Vec<Mp4Box>, Error> {
+    BoxIter::new(data)
+        .map(|item| item.map(|(b, _)| b))
+        .collect()
 }

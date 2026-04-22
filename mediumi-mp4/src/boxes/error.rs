@@ -4,6 +4,8 @@ use crate::util;
 pub enum Error {
     DataTooShort,
     InvalidCompatibleBrandsLength(usize),
+    MissingRequiredBox(&'static str),
+    DuplicateBox(&'static str),
 }
 
 impl std::fmt::Display for Error {
@@ -12,6 +14,12 @@ impl std::fmt::Display for Error {
             Error::DataTooShort => write!(f, "box data too short"),
             Error::InvalidCompatibleBrandsLength(val) => {
                 write!(f, "invalid compatible brands length for ftyp, got {}", val)
+            }
+            Error::MissingRequiredBox(name) => {
+                write!(f, "required child box '{}' is missing", name)
+            }
+            Error::DuplicateBox(name) => {
+                write!(f, "duplicate child box '{}'", name)
             }
         }
     }

@@ -1,5 +1,6 @@
 use crate::{
-    boxes::Error,
+    boxes::{BaseBox, Error},
+    types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 
@@ -19,8 +20,10 @@ pub struct Ftyp {
     pub compatible_brands: Vec<Brand>,
 }
 
-impl Ftyp {
-    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+impl BaseBox for Ftyp {
+    const BOX_TYPE: crate::types::BoxType = BoxType::Ftyp;
+
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
         for b in &self.major_brand.0 {
             writer.write_bits(*b as u32, 8);
         }
@@ -36,7 +39,8 @@ impl Ftyp {
         }
     }
 
-    pub fn parse(data: &[u8], reader: &mut BitstreamReader) -> Result<Self, Error> {
+    fn parse(data: &[u8]) -> Result<Self, Error> {
+        let mut reader = BitstreamReader::new(data);
         let major_brand = Brand([
             reader.read_bits(8)? as u8,
             reader.read_bits(8)? as u8,
@@ -52,7 +56,7 @@ impl Ftyp {
         ];
 
         let remaining = data.len() - 8;
-        if remaining % 4 != 0 {
+        if !remaining.is_multiple_of(4) {
             return Err(Error::InvalidCompatibleBrandsLength(remaining));
         }
 
@@ -79,34 +83,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ftyp_parse() {
+    fn test_ftyp_roundtrip() {
         let data = [
             b'f', b't', b'y', b'p', // major_brand: ftyp
             0x00, 0x00, 0x00, 0x01, // minor_version: 1
             b'f', b't', b'y', b'p', b'i', b's', b'o', b'm', // compatible_brands: [ftyp, isom]
         ];
-        let mut reader = BitstreamReader::new(&data);
-        let ftyp = Ftyp::parse(&data, &mut reader).expect("failed to parse ftyp");
-        assert_eq!(ftyp.major_brand, Brand([b'f', b't', b'y', b'p']));
-        assert_eq!(ftyp.minor_version, [0x00, 0x00, 0x00, 0x01]);
-        assert_eq!(
-            ftyp.compatible_brands,
-            vec![
-                Brand([b'f', b't', b'y', b'p']),
-                Brand([b'i', b's', b'o', b'm'])
-            ]
-        );
-    }
-
-    #[test]
-    fn test_ftyp_roundtrip() {
-        let data = [
-            b'f', b't', b'y', b'p', //
-            0x00, 0x00, 0x00, 0x01, //
-            b'f', b't', b'y', b'p', b'i', b's', b'o', b'm',
-        ];
-        let mut reader = BitstreamReader::new(&data);
-        let ftyp = Ftyp::parse(&data, &mut reader).expect("failed to parse ftyp");
+        let ftyp = Ftyp::parse(&data).expect("failed to parse ftyp");
 
         let mut writer = BitstreamWriter::new();
         ftyp.to_bytes(&mut writer);
