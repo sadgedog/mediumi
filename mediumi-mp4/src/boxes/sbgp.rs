@@ -15,7 +15,7 @@ pub struct Sbgp {
 }
 
 impl BaseBox for Sbgp {
-    const BOX_TYPE: crate::types::BoxType = BoxType::Sbgp;
+    const BOX_TYPE: BoxType = BoxType::Sbgp;
 
     fn to_bytes(&self, writer: &mut crate::util::bitstream::BitstreamWriter) {
         self.header.to_bytes(writer);

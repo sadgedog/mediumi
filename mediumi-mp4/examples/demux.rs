@@ -93,6 +93,13 @@ fn run(label: &str, path: &str) {
                     s.entries.len()
                 );
             }
+            Mp4Box::Subs(s) => {
+                let total_subsamples: usize = s.entries.iter().map(|e| e.subsamples.len()).sum();
+                println!(
+                    "[{}] type: 'subs', entries: {}, total_subsamples: {}",
+                    i, s.entry_count, total_subsamples
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),

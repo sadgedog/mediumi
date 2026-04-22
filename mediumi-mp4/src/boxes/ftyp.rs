@@ -21,7 +21,7 @@ pub struct Ftyp {
 }
 
 impl BaseBox for Ftyp {
-    const BOX_TYPE: crate::types::BoxType = BoxType::Ftyp;
+    const BOX_TYPE: BoxType = BoxType::Ftyp;
 
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
         for b in &self.major_brand.0 {

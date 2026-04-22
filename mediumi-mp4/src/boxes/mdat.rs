@@ -10,7 +10,7 @@ pub struct Mdat {
 }
 
 impl BaseBox for Mdat {
-    const BOX_TYPE: crate::types::BoxType = BoxType::Mdat;
+    const BOX_TYPE: BoxType = BoxType::Mdat;
 
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
         for b in &self.payload {

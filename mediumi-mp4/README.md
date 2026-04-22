@@ -21,7 +21,7 @@ This project is under active development. APIs may change without notice.
         - [x] trun (8.8.8)
         - [x] sbgp (8.9.2)
         - [x] sgpd (8.9.3)
-        - [ ] subs (8.7.7)
+        - [x] subs (8.7.7)
         - [ ] saiz (8.7.8)
         - [ ] saio (8.7.9)
         - [x] tfdt (8.8.12)
