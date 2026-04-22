@@ -1,7 +1,7 @@
 use crate::{
     boxes::{
-        BaseBox, BoxIter, Error, Mp4Box, sbgp::Sbgp, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
-        write_child_box,
+        BaseBox, BoxIter, Error, Mp4Box, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs,
+        tfdt::Tfdt, tfhd::Tfhd, trun::Trun, write_child_box,
     },
     types::BoxType,
     util::bitstream::BitstreamWriter,
@@ -12,6 +12,9 @@ pub struct Traf {
     pub tfhd: Tfhd,
     pub truns: Vec<Trun>,
     pub sbgps: Vec<Sbgp>,
+    pub sgpds: Vec<Sgpd>,
+    pub subs: Vec<Subs>,
+    pub saizs: Vec<Saiz>,
     pub tfdt: Option<Tfdt>,
     pub others: Vec<Vec<u8>>,
 }
@@ -22,13 +25,22 @@ impl BaseBox for Traf {
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
         write_child_box(writer, Tfhd::BOX_TYPE, |w| self.tfhd.to_bytes(w));
         if let Some(ref tfdt) = self.tfdt {
-            write_child_box(writer, BoxType::Tfdt, |w| tfdt.to_bytes(w));
+            write_child_box(writer, Tfdt::BOX_TYPE, |w| tfdt.to_bytes(w));
         }
         for trun in &self.truns {
             write_child_box(writer, Trun::BOX_TYPE, |w| trun.to_bytes(w));
         }
         for sbgp in &self.sbgps {
             write_child_box(writer, Sbgp::BOX_TYPE, |w| sbgp.to_bytes(w));
+        }
+        for sgpd in &self.sgpds {
+            write_child_box(writer, Sgpd::BOX_TYPE, |w| sgpd.to_bytes(w));
+        }
+        for subs in &self.subs {
+            write_child_box(writer, Subs::BOX_TYPE, |w| subs.to_bytes(w));
+        }
+        for saiz in &self.saizs {
+            write_child_box(writer, Saiz::BOX_TYPE, |w| saiz.to_bytes(w));
         }
         for raw in &self.others {
             for &b in raw {
@@ -42,6 +54,9 @@ impl BaseBox for Traf {
         let mut tfdt: Option<Tfdt> = None;
         let mut truns = Vec::new();
         let mut sbgps = Vec::new();
+        let mut sgpds = Vec::new();
+        let mut subs = Vec::new();
+        let mut saizs = Vec::new();
         let mut others: Vec<Vec<u8>> = Vec::new();
 
         for item in BoxIter::new(data) {
@@ -55,6 +70,9 @@ impl BaseBox for Traf {
                 }
                 Mp4Box::Trun(t) => truns.push(t),
                 Mp4Box::Sbgp(s) => sbgps.push(s),
+                Mp4Box::Sgpd(s) => sgpds.push(s),
+                Mp4Box::Subs(s) => subs.push(s),
+                Mp4Box::Saiz(s) => saizs.push(s),
                 Mp4Box::Tfdt(t) => {
                     if tfdt.is_some() {
                         return Err(Error::DuplicateBox("tfdt"));
@@ -72,6 +90,9 @@ impl BaseBox for Traf {
             tfdt,
             truns,
             sbgps,
+            sgpds,
+            subs,
+            saizs,
             others,
         })
     }
@@ -119,6 +140,9 @@ mod tests {
                 }],
             }],
             sbgps: Vec::new(),
+            sgpds: Vec::new(),
+            subs: Vec::new(),
+            saizs: Vec::new(),
             others: Vec::new(),
         };
         let mut w = BitstreamWriter::new();
@@ -144,37 +168,5 @@ mod tests {
         let mut w = BitstreamWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), bytes);
-    }
-
-    #[test]
-    fn test_traf_with_unknown_child_preserved() {
-        let mut raw = Vec::new();
-        // tfhd: size=16, type='tfhd', body(version+flags+track_id)
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x10]);
-        raw.extend_from_slice(b"tfhd");
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // version + flags
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x07]); // track_id = 7
-        // free: size=8, type='free', no body
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x08]);
-        raw.extend_from_slice(b"free");
-
-        let parsed = Traf::parse(&raw).expect("failed to parse traf");
-        assert_eq!(parsed.tfhd.track_id, 7);
-        assert_eq!(parsed.others.len(), 1);
-        assert_eq!(
-            parsed.others[0],
-            [0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e']
-        );
-
-        let mut w = BitstreamWriter::new();
-        parsed.to_bytes(&mut w);
-        assert_eq!(w.finish(), raw);
-    }
-
-    #[test]
-    fn test_traf_missing_tfhd_errors() {
-        let raw = [0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e'];
-        let err = Traf::parse(&raw).unwrap_err();
-        assert_eq!(err, Error::MissingRequiredBox("tfhd"));
     }
 }

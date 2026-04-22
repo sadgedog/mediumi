@@ -100,6 +100,23 @@ fn run(label: &str, path: &str) {
                     i, s.entry_count, total_subsamples
                 );
             }
+            Mp4Box::Saiz(s) => {
+                let aux = s
+                    .aux_info_type
+                    .map(|t| {
+                        let bytes = t.to_be_bytes();
+                        format!("'{}'", std::str::from_utf8(&bytes).unwrap_or("????"))
+                    })
+                    .unwrap_or_else(|| "none".to_string());
+                println!(
+                    "[{}] type: 'saiz', aux_info_type: {}, default_size: {}, sample_count: {}, per_sample: {}",
+                    i,
+                    aux,
+                    s.default_sample_info_size,
+                    s.sample_count,
+                    s.sample_info_sizes.len()
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),

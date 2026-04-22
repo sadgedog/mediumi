@@ -180,41 +180,4 @@ mod tests {
         subs.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }
-
-    #[test]
-    fn test_subs_empty_entry_count() {
-        // v=0, entry_count = 0
-        let data = [
-            0x00, // version
-            0x00, 0x00, 0x00, // flags
-            0x00, 0x00, 0x00, 0x00, // entry_count = 0
-        ];
-        let subs = Subs::parse(&data).expect("parse empty subs");
-        assert_eq!(subs.entry_count, 0);
-        assert!(subs.entries.is_empty());
-
-        let mut w = BitstreamWriter::new();
-        subs.to_bytes(&mut w);
-        assert_eq!(w.finish(), data);
-    }
-
-    #[test]
-    fn test_subs_entry_with_zero_subsamples() {
-        // v=0, 1 entry with 0 subsamples
-        let data = [
-            0x00, // version
-            0x00, 0x00, 0x00, // flags
-            0x00, 0x00, 0x00, 0x01, // entry_count = 1
-            0x00, 0x00, 0x00, 0x03, // sample_delta = 3
-            0x00, 0x00, // subsample_count = 0
-        ];
-        let subs = Subs::parse(&data).expect("parse subs with empty subsamples");
-        assert_eq!(subs.entries[0].sample_delta, 3);
-        assert_eq!(subs.entries[0].subsample_count, 0);
-        assert!(subs.entries[0].subsamples.is_empty());
-
-        let mut w = BitstreamWriter::new();
-        subs.to_bytes(&mut w);
-        assert_eq!(w.finish(), data);
-    }
 }

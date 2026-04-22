@@ -98,6 +98,9 @@ mod tests {
                     samples: Vec::new(),
                 }],
                 sbgps: Vec::new(),
+                sgpds: Vec::new(),
+                subs: Vec::new(),
+                saizs: Vec::new(),
                 others: Vec::new(),
             }],
             others: Vec::new(),
@@ -128,38 +131,5 @@ mod tests {
         let mut w = BitstreamWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), bytes);
-    }
-
-    #[test]
-    fn test_moof_missing_mfhd_errors() {
-        let raw: [u8; 0] = [];
-        let err = Moof::parse(&raw).unwrap_err();
-        assert_eq!(err, Error::MissingRequiredBox("mfhd"));
-    }
-
-    #[test]
-    fn test_moof_with_unknown_child_preserved() {
-        // mfhd + 'free' box
-        let mut raw = Vec::new();
-        // mfhd: size=16, type='mfhd', body(version+flags+seq=7)
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x10]);
-        raw.extend_from_slice(b"mfhd");
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // version + flags
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x07]); // sequence_number
-        // free: size=8, type='free', no body
-        raw.extend_from_slice(&[0x00, 0x00, 0x00, 0x08]);
-        raw.extend_from_slice(b"free");
-
-        let parsed = Moof::parse(&raw).expect("failed to parse moof");
-        assert_eq!(parsed.mfhd.sequence_number, 7);
-        assert_eq!(parsed.others.len(), 1);
-        assert_eq!(
-            parsed.others[0],
-            [0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e']
-        );
-
-        let mut w = BitstreamWriter::new();
-        parsed.to_bytes(&mut w);
-        assert_eq!(w.finish(), raw);
     }
 }

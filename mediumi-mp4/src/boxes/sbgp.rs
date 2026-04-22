@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::BitstreamReader,
+    util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct Sbgp {
 impl BaseBox for Sbgp {
     const BOX_TYPE: BoxType = BoxType::Sbgp;
 
-    fn to_bytes(&self, writer: &mut crate::util::bitstream::BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.grouping_type, 32);
         if let Some(v) = self.grouping_type_parameter {
@@ -65,5 +65,33 @@ impl FullBox for Sbgp {
 
     fn flags(&self) -> u32 {
         self.header.flags
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sbgp_roundtrip() {
+        // v=0, grouping_type='seig', 1 entry (sample_count=5, gdi=1)
+        let data = [
+            0x00, // version = 0
+            0x00, 0x00, 0x00, // flags
+            b's', b'e', b'i', b'g', // grouping_type
+            0x00, 0x00, 0x00, 0x01, // entry_count = 1
+            0x00, 0x00, 0x00, 0x05, // sample_count[0] = 5
+            0x00, 0x00, 0x00, 0x01, // group_description_index[0] = 1
+        ];
+        let sbgp = Sbgp::parse(&data).expect("parse sbgp");
+        assert_eq!(sbgp.grouping_type, u32::from_be_bytes(*b"seig"));
+        assert_eq!(sbgp.grouping_type_parameter, None);
+        assert_eq!(sbgp.entry_count, 1);
+        assert_eq!(sbgp.sample_count, [5]);
+        assert_eq!(sbgp.group_description_index, [1]);
+
+        let mut w = BitstreamWriter::new();
+        sbgp.to_bytes(&mut w);
+        assert_eq!(w.finish(), data);
     }
 }

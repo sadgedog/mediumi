@@ -22,7 +22,7 @@ This project is under active development. APIs may change without notice.
         - [x] sbgp (8.9.2)
         - [x] sgpd (8.9.3)
         - [x] subs (8.7.7)
-        - [ ] saiz (8.7.8)
+        - [x] saiz (8.7.8)
         - [ ] saio (8.7.9)
         - [x] tfdt (8.8.12)
         - [ ] meta (8.11.1)

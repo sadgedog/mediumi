@@ -3,6 +3,7 @@ pub mod ftyp;
 pub mod mdat;
 pub mod mfhd;
 pub mod moof;
+pub mod saiz;
 pub mod sbgp;
 pub mod sgpd;
 pub mod subs;
@@ -13,8 +14,8 @@ pub mod trun;
 
 use crate::{
     boxes::{
-        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, sbgp::Sbgp, sgpd::Sgpd,
-        subs::Subs, tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
+        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, saiz::Saiz, sbgp::Sbgp,
+        sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -188,6 +189,7 @@ pub enum Mp4Box {
     Trun(Trun),
     Sbgp(Sbgp),
     Sgpd(Sgpd),
+    Saiz(Saiz),
     Tfdt(Tfdt),
     Unknown(UnknownBox),
 }
@@ -213,6 +215,7 @@ impl Mp4Box {
             BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),
             BoxType::Traf => Mp4Box::Traf(Traf::parse(body)?),
             BoxType::Subs => Mp4Box::Subs(Subs::parse(body)?),
+            BoxType::Saiz => Mp4Box::Saiz(Saiz::parse(body)?),
             BoxType::Tfhd => Mp4Box::Tfhd(Tfhd::parse(body)?),
             BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
             BoxType::Sbgp => Mp4Box::Sbgp(Sbgp::parse(body)?),
@@ -235,6 +238,7 @@ impl Mp4Box {
             Mp4Box::Mfhd(b) => write_child_box(&mut writer, Mfhd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Traf(b) => write_child_box(&mut writer, Traf::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Subs(b) => write_child_box(&mut writer, Subs::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Saiz(b) => write_child_box(&mut writer, Saiz::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Tfhd(b) => write_child_box(&mut writer, Tfhd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Trun(b) => write_child_box(&mut writer, Trun::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Sbgp(b) => write_child_box(&mut writer, Sbgp::BOX_TYPE, |w| b.to_bytes(w)),
