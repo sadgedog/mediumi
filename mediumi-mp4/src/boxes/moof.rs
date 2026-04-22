@@ -97,6 +97,7 @@ mod tests {
                     first_sample_flags: None,
                     samples: Vec::new(),
                 }],
+                sbgps: Vec::new(),
                 others: Vec::new(),
             }],
             others: Vec::new(),

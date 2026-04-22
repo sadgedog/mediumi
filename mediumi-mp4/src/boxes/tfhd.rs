@@ -48,10 +48,7 @@ impl BaseBox for Tfhd {
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
-        let header = FullBoxHeader {
-            version: reader.read_bits(8)? as u8,
-            flags: reader.read_bits(24)?,
-        };
+        let header = FullBoxHeader::parse(&mut reader)?;
         let track_id = reader.read_bits(32)?;
 
         let base_data_offset = if header.flags & BASE_DATA_OFFSET_PRESENT != 0 {

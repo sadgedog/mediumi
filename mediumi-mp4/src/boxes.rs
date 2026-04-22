@@ -3,6 +3,7 @@ pub mod ftyp;
 pub mod mdat;
 pub mod mfhd;
 pub mod moof;
+pub mod sbgp;
 pub mod tfdt;
 pub mod tfhd;
 pub mod traf;
@@ -10,8 +11,8 @@ pub mod trun;
 
 use crate::{
     boxes::{
-        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, tfdt::Tfdt, tfhd::Tfhd,
-        traf::Traf, trun::Trun,
+        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, sbgp::Sbgp, tfdt::Tfdt,
+        tfhd::Tfhd, traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -127,11 +128,7 @@ impl FullBoxHeader {
         writer.write_bits(self.flags, 24);
     }
 
-    pub fn parse(data: &[u8]) -> Result<Self, Error> {
-        if data.len() < 4 {
-            return Err(Error::DataTooShort);
-        }
-        let mut reader = BitstreamReader::new(data);
+    pub fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
         let version = reader.read_bits(8)? as u8;
         let flags = reader.read_bits(24)?;
         Ok(Self { version, flags })
@@ -181,12 +178,13 @@ pub struct UnknownBox {
 pub enum Mp4Box {
     Ftyp(Ftyp),
     Mdat(Mdat),
-    Mfhd(Mfhd),
     Moof(Moof),
+    Mfhd(Mfhd),
     Traf(Traf),
     Tfhd(Tfhd),
-    Tfdt(Tfdt),
     Trun(Trun),
+    Sbgp(Sbgp),
+    Tfdt(Tfdt),
     Unknown(UnknownBox),
 }
 
@@ -207,12 +205,13 @@ impl Mp4Box {
         let parsed = match &header.box_type {
             BoxType::Ftyp => Mp4Box::Ftyp(Ftyp::parse(body)?),
             BoxType::Mdat => Mp4Box::Mdat(Mdat::parse(body)?),
-            BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),
             BoxType::Moof => Mp4Box::Moof(Moof::parse(body)?),
+            BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),
             BoxType::Traf => Mp4Box::Traf(Traf::parse(body)?),
             BoxType::Tfhd => Mp4Box::Tfhd(Tfhd::parse(body)?),
-            BoxType::Tfdt => Mp4Box::Tfdt(Tfdt::parse(body)?),
             BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
+            BoxType::Sbgp => Mp4Box::Sbgp(Sbgp::parse(body)?),
+            BoxType::Tfdt => Mp4Box::Tfdt(Tfdt::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),
                 payload: body.to_vec(),
@@ -226,12 +225,13 @@ impl Mp4Box {
         match self {
             Mp4Box::Ftyp(b) => write_child_box(&mut writer, Ftyp::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Mdat(b) => write_child_box(&mut writer, Mdat::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Mfhd(b) => write_child_box(&mut writer, Mfhd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Moof(b) => write_child_box(&mut writer, Moof::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Mfhd(b) => write_child_box(&mut writer, Mfhd::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Traf(b) => write_child_box(&mut writer, Traf::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Tfhd(b) => write_child_box(&mut writer, Tfhd::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Tfdt(b) => write_child_box(&mut writer, Tfdt::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Trun(b) => write_child_box(&mut writer, Trun::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Sbgp(b) => write_child_box(&mut writer, Sbgp::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Tfdt(b) => write_child_box(&mut writer, Tfdt::BOX_TYPE, |w| b.to_bytes(w)),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
                 for &byte in &u.payload {

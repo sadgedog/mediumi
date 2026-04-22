@@ -26,10 +26,7 @@ impl BaseBox for Tfdt {
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
-        let header = FullBoxHeader {
-            version: reader.read_bits(8)? as u8,
-            flags: reader.read_bits(24)?,
-        };
+        let header = FullBoxHeader::parse(&mut reader)?;
         let base_media_decode_time = if header.version == 1 {
             let high = reader.read_bits(32)? as u64;
             let low = reader.read_bits(32)? as u64;

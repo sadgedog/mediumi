@@ -63,10 +63,7 @@ impl BaseBox for Trun {
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
-        let header = FullBoxHeader {
-            version: reader.read_bits(8)? as u8,
-            flags: reader.read_bits(24)?,
-        };
+        let header = FullBoxHeader::parse(&mut reader)?;
         let sample_count = reader.read_bits(32)?;
 
         let data_offset = if header.flags & DATA_OFFSET_PRESENT != 0 {

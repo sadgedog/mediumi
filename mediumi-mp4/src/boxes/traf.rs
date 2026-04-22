@@ -1,5 +1,8 @@
 use crate::{
-    boxes::{BaseBox, BoxIter, Error, Mp4Box, tfdt::Tfdt, tfhd::Tfhd, trun::Trun, write_child_box},
+    boxes::{
+        BaseBox, BoxIter, Error, Mp4Box, sbgp::Sbgp, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
+        write_child_box,
+    },
     types::BoxType,
     util::bitstream::BitstreamWriter,
 };
@@ -7,8 +10,9 @@ use crate::{
 #[derive(Debug)]
 pub struct Traf {
     pub tfhd: Tfhd,
-    pub tfdt: Option<Tfdt>,
     pub truns: Vec<Trun>,
+    pub sbgps: Vec<Sbgp>,
+    pub tfdt: Option<Tfdt>,
     pub others: Vec<Vec<u8>>,
 }
 
@@ -23,6 +27,9 @@ impl BaseBox for Traf {
         for trun in &self.truns {
             write_child_box(writer, Trun::BOX_TYPE, |w| trun.to_bytes(w));
         }
+        for sbgp in &self.sbgps {
+            write_child_box(writer, Sbgp::BOX_TYPE, |w| sbgp.to_bytes(w));
+        }
         for raw in &self.others {
             for &b in raw {
                 writer.write_bits(b as u32, 8);
@@ -34,6 +41,7 @@ impl BaseBox for Traf {
         let mut tfhd: Option<Tfhd> = None;
         let mut tfdt: Option<Tfdt> = None;
         let mut truns = Vec::new();
+        let mut sbgps = Vec::new();
         let mut others: Vec<Vec<u8>> = Vec::new();
 
         for item in BoxIter::new(data) {
@@ -45,13 +53,14 @@ impl BaseBox for Traf {
                     }
                     tfhd = Some(t);
                 }
+                Mp4Box::Trun(t) => truns.push(t),
+                Mp4Box::Sbgp(s) => sbgps.push(s),
                 Mp4Box::Tfdt(t) => {
                     if tfdt.is_some() {
                         return Err(Error::DuplicateBox("tfdt"));
                     }
                     tfdt = Some(t);
                 }
-                Mp4Box::Trun(t) => truns.push(t),
                 _ => others.push(raw.to_vec()),
             }
         }
@@ -62,6 +71,7 @@ impl BaseBox for Traf {
             tfhd,
             tfdt,
             truns,
+            sbgps,
             others,
         })
     }
@@ -108,6 +118,7 @@ mod tests {
                     sample_composition_time_offset: None,
                 }],
             }],
+            sbgps: Vec::new(),
             others: Vec::new(),
         };
         let mut w = BitstreamWriter::new();

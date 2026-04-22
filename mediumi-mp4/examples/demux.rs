@@ -78,6 +78,12 @@ fn run(label: &str, path: &str) {
             Mp4Box::Trun(t) => {
                 println!("[{}] type: 'trun', sample_count: {}", i, t.samples.len());
             }
+            Mp4Box::Sbgp(s) => {
+                println!(
+                    "[{}] type: 'sbgp', grouping_type: {:#010x}, entries: {}",
+                    i, s.grouping_type, s.entry_count
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),
