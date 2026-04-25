@@ -1,5 +1,5 @@
 use crate::{
-    boxes::{BaseBox, BoxIter, Error, Mp4Box, mfhd::Mfhd, traf::Traf, write_child_box},
+    boxes::{BaseBox, BoxIter, Error, Mp4Box, mfhd::Mfhd, traf::Traf},
     types::BoxType,
     util::bitstream::BitstreamWriter,
 };
@@ -15,9 +15,9 @@ impl BaseBox for Moof {
     const BOX_TYPE: BoxType = BoxType::Moof;
 
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
-        write_child_box(writer, Mfhd::BOX_TYPE, |w| self.mfhd.to_bytes(w));
+        self.mfhd.write_box(writer);
         for traf in &self.trafs {
-            write_child_box(writer, Traf::BOX_TYPE, |w| traf.to_bytes(w));
+            traf.write_box(writer);
         }
         for raw in &self.others {
             for &b in raw {

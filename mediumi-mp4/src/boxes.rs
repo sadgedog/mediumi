@@ -24,6 +24,9 @@ use crate::{
 pub trait BaseBox: Sized {
     const BOX_TYPE: BoxType;
     fn to_bytes(&self, writer: &mut BitstreamWriter);
+    fn write_box(&self, writer: &mut BitstreamWriter) {
+        write_child_box(writer, Self::BOX_TYPE, |w| self.to_bytes(w));
+    }
     fn parse(data: &[u8]) -> Result<Self, Error>;
 }
 
@@ -138,7 +141,7 @@ impl FullBoxHeader {
     }
 }
 
-pub(crate) fn write_child_box<F: FnOnce(&mut BitstreamWriter)>(
+fn write_child_box<F: FnOnce(&mut BitstreamWriter)>(
     out: &mut BitstreamWriter,
     box_type: BoxType,
     body_fn: F,
@@ -232,18 +235,18 @@ impl Mp4Box {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut writer = BitstreamWriter::new();
         match self {
-            Mp4Box::Ftyp(b) => write_child_box(&mut writer, Ftyp::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Mdat(b) => write_child_box(&mut writer, Mdat::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Moof(b) => write_child_box(&mut writer, Moof::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Mfhd(b) => write_child_box(&mut writer, Mfhd::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Traf(b) => write_child_box(&mut writer, Traf::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Subs(b) => write_child_box(&mut writer, Subs::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Saiz(b) => write_child_box(&mut writer, Saiz::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Tfhd(b) => write_child_box(&mut writer, Tfhd::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Trun(b) => write_child_box(&mut writer, Trun::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Sbgp(b) => write_child_box(&mut writer, Sbgp::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Sgpd(b) => write_child_box(&mut writer, Sgpd::BOX_TYPE, |w| b.to_bytes(w)),
-            Mp4Box::Tfdt(b) => write_child_box(&mut writer, Tfdt::BOX_TYPE, |w| b.to_bytes(w)),
+            Mp4Box::Ftyp(b) => b.write_box(&mut writer),
+            Mp4Box::Mdat(b) => b.write_box(&mut writer),
+            Mp4Box::Moof(b) => b.write_box(&mut writer),
+            Mp4Box::Mfhd(b) => b.write_box(&mut writer),
+            Mp4Box::Traf(b) => b.write_box(&mut writer),
+            Mp4Box::Subs(b) => b.write_box(&mut writer),
+            Mp4Box::Saiz(b) => b.write_box(&mut writer),
+            Mp4Box::Tfhd(b) => b.write_box(&mut writer),
+            Mp4Box::Trun(b) => b.write_box(&mut writer),
+            Mp4Box::Sbgp(b) => b.write_box(&mut writer),
+            Mp4Box::Sgpd(b) => b.write_box(&mut writer),
+            Mp4Box::Tfdt(b) => b.write_box(&mut writer),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
                 for &byte in &u.payload {

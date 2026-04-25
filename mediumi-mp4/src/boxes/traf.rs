@@ -1,7 +1,7 @@
 use crate::{
     boxes::{
         BaseBox, BoxIter, Error, Mp4Box, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs,
-        tfdt::Tfdt, tfhd::Tfhd, trun::Trun, write_child_box,
+        tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
     },
     types::BoxType,
     util::bitstream::BitstreamWriter,
@@ -23,24 +23,24 @@ impl BaseBox for Traf {
     const BOX_TYPE: BoxType = BoxType::Traf;
 
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
-        write_child_box(writer, Tfhd::BOX_TYPE, |w| self.tfhd.to_bytes(w));
+        self.tfhd.write_box(writer);
         if let Some(ref tfdt) = self.tfdt {
-            write_child_box(writer, Tfdt::BOX_TYPE, |w| tfdt.to_bytes(w));
+            tfdt.write_box(writer);
         }
         for trun in &self.truns {
-            write_child_box(writer, Trun::BOX_TYPE, |w| trun.to_bytes(w));
+            trun.write_box(writer);
         }
         for sbgp in &self.sbgps {
-            write_child_box(writer, Sbgp::BOX_TYPE, |w| sbgp.to_bytes(w));
+            sbgp.write_box(writer);
         }
         for sgpd in &self.sgpds {
-            write_child_box(writer, Sgpd::BOX_TYPE, |w| sgpd.to_bytes(w));
+            sgpd.write_box(writer);
         }
         for subs in &self.subs {
-            write_child_box(writer, Subs::BOX_TYPE, |w| subs.to_bytes(w));
+            subs.write_box(writer);
         }
         for saiz in &self.saizs {
-            write_child_box(writer, Saiz::BOX_TYPE, |w| saiz.to_bytes(w));
+            saiz.write_box(writer);
         }
         for raw in &self.others {
             for &b in raw {
