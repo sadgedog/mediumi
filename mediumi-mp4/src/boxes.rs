@@ -3,6 +3,7 @@ pub mod ftyp;
 pub mod mdat;
 pub mod mfhd;
 pub mod moof;
+pub mod saio;
 pub mod saiz;
 pub mod sbgp;
 pub mod sgpd;
@@ -14,8 +15,8 @@ pub mod trun;
 
 use crate::{
     boxes::{
-        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, saiz::Saiz, sbgp::Sbgp,
-        sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
+        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, saio::Saio, saiz::Saiz,
+        sbgp::Sbgp, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -193,11 +194,38 @@ pub enum Mp4Box {
     Sbgp(Sbgp),
     Sgpd(Sgpd),
     Saiz(Saiz),
+    Saio(Saio),
     Tfdt(Tfdt),
     Unknown(UnknownBox),
 }
 
 impl Mp4Box {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut writer = BitstreamWriter::new();
+        match self {
+            Mp4Box::Ftyp(b) => b.write_box(&mut writer),
+            Mp4Box::Mdat(b) => b.write_box(&mut writer),
+            Mp4Box::Moof(b) => b.write_box(&mut writer),
+            Mp4Box::Mfhd(b) => b.write_box(&mut writer),
+            Mp4Box::Traf(b) => b.write_box(&mut writer),
+            Mp4Box::Subs(b) => b.write_box(&mut writer),
+            Mp4Box::Saiz(b) => b.write_box(&mut writer),
+            Mp4Box::Saio(b) => b.write_box(&mut writer),
+            Mp4Box::Tfhd(b) => b.write_box(&mut writer),
+            Mp4Box::Trun(b) => b.write_box(&mut writer),
+            Mp4Box::Sbgp(b) => b.write_box(&mut writer),
+            Mp4Box::Sgpd(b) => b.write_box(&mut writer),
+            Mp4Box::Tfdt(b) => b.write_box(&mut writer),
+            Mp4Box::Unknown(u) => {
+                u.header.to_bytes(&mut writer);
+                for &byte in &u.payload {
+                    writer.write_bits(byte as u32, 8);
+                }
+            }
+        }
+        writer.finish()
+    }
+
     pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
         let header = BoxHeader::parse(data)?;
 
@@ -219,6 +247,7 @@ impl Mp4Box {
             BoxType::Traf => Mp4Box::Traf(Traf::parse(body)?),
             BoxType::Subs => Mp4Box::Subs(Subs::parse(body)?),
             BoxType::Saiz => Mp4Box::Saiz(Saiz::parse(body)?),
+            BoxType::Saio => Mp4Box::Saio(Saio::parse(body)?),
             BoxType::Tfhd => Mp4Box::Tfhd(Tfhd::parse(body)?),
             BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
             BoxType::Sbgp => Mp4Box::Sbgp(Sbgp::parse(body)?),
@@ -230,31 +259,6 @@ impl Mp4Box {
             }),
         };
         Ok((parsed, total))
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut writer = BitstreamWriter::new();
-        match self {
-            Mp4Box::Ftyp(b) => b.write_box(&mut writer),
-            Mp4Box::Mdat(b) => b.write_box(&mut writer),
-            Mp4Box::Moof(b) => b.write_box(&mut writer),
-            Mp4Box::Mfhd(b) => b.write_box(&mut writer),
-            Mp4Box::Traf(b) => b.write_box(&mut writer),
-            Mp4Box::Subs(b) => b.write_box(&mut writer),
-            Mp4Box::Saiz(b) => b.write_box(&mut writer),
-            Mp4Box::Tfhd(b) => b.write_box(&mut writer),
-            Mp4Box::Trun(b) => b.write_box(&mut writer),
-            Mp4Box::Sbgp(b) => b.write_box(&mut writer),
-            Mp4Box::Sgpd(b) => b.write_box(&mut writer),
-            Mp4Box::Tfdt(b) => b.write_box(&mut writer),
-            Mp4Box::Unknown(u) => {
-                u.header.to_bytes(&mut writer);
-                for &byte in &u.payload {
-                    writer.write_bits(byte as u32, 8);
-                }
-            }
-        }
-        writer.finish()
     }
 }
 

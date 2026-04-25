@@ -117,6 +117,20 @@ fn run(label: &str, path: &str) {
                     s.sample_info_sizes.len()
                 );
             }
+            Mp4Box::Saio(s) => {
+                let aux = s
+                    .aux_info_type
+                    .map(|t| {
+                        let bytes = t.to_be_bytes();
+                        format!("'{}'", std::str::from_utf8(&bytes).unwrap_or("????"))
+                    })
+                    .unwrap_or_else(|| "none".to_string());
+                let width = if s.header.version == 0 { 32 } else { 64 };
+                println!(
+                    "[{}] type: 'saio', aux_info_type: {}, entry_count: {}, offset_width: {}-bit",
+                    i, aux, s.entry_count, width
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),
