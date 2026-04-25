@@ -1,7 +1,7 @@
 use crate::{
     boxes::{
-        BaseBox, BoxIter, Error, Mp4Box, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs,
-        tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
+        BaseBox, BoxIter, Error, Mp4Box, meta::Meta, saio::Saio, saiz::Saiz, sbgp::Sbgp,
+        sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
     },
     types::BoxType,
     util::bitstream::BitstreamWriter,
@@ -15,7 +15,9 @@ pub struct Traf {
     pub sgpds: Vec<Sgpd>,
     pub subs: Vec<Subs>,
     pub saizs: Vec<Saiz>,
+    pub saios: Vec<Saio>,
     pub tfdt: Option<Tfdt>,
+    pub meta: Option<Meta>,
     pub others: Vec<Vec<u8>>,
 }
 
@@ -42,6 +44,12 @@ impl BaseBox for Traf {
         for saiz in &self.saizs {
             saiz.write_box(writer);
         }
+        for saio in &self.saios {
+            saio.write_box(writer);
+        }
+        if let Some(ref meta) = self.meta {
+            meta.write_box(writer);
+        }
         for raw in &self.others {
             for &b in raw {
                 writer.write_bits(b as u32, 8);
@@ -52,11 +60,13 @@ impl BaseBox for Traf {
     fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut tfhd: Option<Tfhd> = None;
         let mut tfdt: Option<Tfdt> = None;
+        let mut meta: Option<Meta> = None;
         let mut truns = Vec::new();
         let mut sbgps = Vec::new();
         let mut sgpds = Vec::new();
         let mut subs = Vec::new();
         let mut saizs = Vec::new();
+        let mut saios = Vec::new();
         let mut others: Vec<Vec<u8>> = Vec::new();
 
         for item in BoxIter::new(data) {
@@ -73,11 +83,18 @@ impl BaseBox for Traf {
                 Mp4Box::Sgpd(s) => sgpds.push(s),
                 Mp4Box::Subs(s) => subs.push(s),
                 Mp4Box::Saiz(s) => saizs.push(s),
+                Mp4Box::Saio(s) => saios.push(s),
                 Mp4Box::Tfdt(t) => {
                     if tfdt.is_some() {
                         return Err(Error::DuplicateBox("tfdt"));
                     }
                     tfdt = Some(t);
+                }
+                Mp4Box::Meta(m) => {
+                    if meta.is_some() {
+                        return Err(Error::DuplicateBox("meta"));
+                    }
+                    meta = Some(m);
                 }
                 _ => others.push(raw.to_vec()),
             }
@@ -87,12 +104,14 @@ impl BaseBox for Traf {
 
         Ok(Self {
             tfhd,
-            tfdt,
             truns,
             sbgps,
             sgpds,
             subs,
             saizs,
+            saios,
+            tfdt,
+            meta,
             others,
         })
     }
@@ -143,6 +162,8 @@ mod tests {
             sgpds: Vec::new(),
             subs: Vec::new(),
             saizs: Vec::new(),
+            saios: Vec::new(),
+            meta: None,
             others: Vec::new(),
         };
         let mut w = BitstreamWriter::new();

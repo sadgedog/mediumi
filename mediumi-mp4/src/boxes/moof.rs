@@ -40,7 +40,7 @@ impl BaseBox for Moof {
                     }
                     mfhd = Some(m);
                 }
-                Mp4Box::Traf(t) => trafs.push(t),
+                Mp4Box::Traf(t) => trafs.push(*t),
                 _ => others.push(raw.to_vec()),
             }
         }
@@ -101,6 +101,8 @@ mod tests {
                 sgpds: Vec::new(),
                 subs: Vec::new(),
                 saizs: Vec::new(),
+                saios: Vec::new(),
+                meta: None,
                 others: Vec::new(),
             }],
             others: Vec::new(),

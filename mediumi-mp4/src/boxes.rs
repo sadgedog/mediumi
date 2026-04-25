@@ -1,6 +1,8 @@
 pub mod error;
 pub mod ftyp;
+pub mod hdlr;
 pub mod mdat;
+pub mod meta;
 pub mod mfhd;
 pub mod moof;
 pub mod saio;
@@ -15,8 +17,9 @@ pub mod trun;
 
 use crate::{
     boxes::{
-        error::Error, ftyp::Ftyp, mdat::Mdat, mfhd::Mfhd, moof::Moof, saio::Saio, saiz::Saiz,
-        sbgp::Sbgp, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, traf::Traf, trun::Trun,
+        error::Error, ftyp::Ftyp, hdlr::Hdlr, mdat::Mdat, meta::Meta, mfhd::Mfhd, moof::Moof,
+        saio::Saio, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd,
+        traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -184,10 +187,11 @@ pub struct UnknownBox {
 #[derive(Debug)]
 pub enum Mp4Box {
     Ftyp(Ftyp),
+    Hdlr(Hdlr),
     Mdat(Mdat),
     Moof(Moof),
     Mfhd(Mfhd),
-    Traf(Traf),
+    Traf(Box<Traf>),
     Subs(Subs),
     Tfhd(Tfhd),
     Trun(Trun),
@@ -196,6 +200,7 @@ pub enum Mp4Box {
     Saiz(Saiz),
     Saio(Saio),
     Tfdt(Tfdt),
+    Meta(Meta),
     Unknown(UnknownBox),
 }
 
@@ -205,6 +210,7 @@ impl Mp4Box {
         match self {
             Mp4Box::Ftyp(b) => b.write_box(&mut writer),
             Mp4Box::Mdat(b) => b.write_box(&mut writer),
+            Mp4Box::Hdlr(b) => b.write_box(&mut writer),
             Mp4Box::Moof(b) => b.write_box(&mut writer),
             Mp4Box::Mfhd(b) => b.write_box(&mut writer),
             Mp4Box::Traf(b) => b.write_box(&mut writer),
@@ -216,6 +222,7 @@ impl Mp4Box {
             Mp4Box::Sbgp(b) => b.write_box(&mut writer),
             Mp4Box::Sgpd(b) => b.write_box(&mut writer),
             Mp4Box::Tfdt(b) => b.write_box(&mut writer),
+            Mp4Box::Meta(b) => b.write_box(&mut writer),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
                 for &byte in &u.payload {
@@ -242,9 +249,10 @@ impl Mp4Box {
         let parsed = match &header.box_type {
             BoxType::Ftyp => Mp4Box::Ftyp(Ftyp::parse(body)?),
             BoxType::Mdat => Mp4Box::Mdat(Mdat::parse(body)?),
+            BoxType::Hdlr => Mp4Box::Hdlr(Hdlr::parse(body)?),
             BoxType::Moof => Mp4Box::Moof(Moof::parse(body)?),
             BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),
-            BoxType::Traf => Mp4Box::Traf(Traf::parse(body)?),
+            BoxType::Traf => Mp4Box::Traf(Box::new(Traf::parse(body)?)),
             BoxType::Subs => Mp4Box::Subs(Subs::parse(body)?),
             BoxType::Saiz => Mp4Box::Saiz(Saiz::parse(body)?),
             BoxType::Saio => Mp4Box::Saio(Saio::parse(body)?),
@@ -252,6 +260,7 @@ impl Mp4Box {
             BoxType::Trun => Mp4Box::Trun(Trun::parse(body)?),
             BoxType::Sbgp => Mp4Box::Sbgp(Sbgp::parse(body)?),
             BoxType::Sgpd => Mp4Box::Sgpd(Sgpd::parse(body)?),
+            BoxType::Meta => Mp4Box::Meta(Meta::parse(body)?),
             BoxType::Tfdt => Mp4Box::Tfdt(Tfdt::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),

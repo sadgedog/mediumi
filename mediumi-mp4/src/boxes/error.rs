@@ -6,6 +6,7 @@ pub enum Error {
     InvalidCompatibleBrandsLength(usize),
     MissingRequiredBox(&'static str),
     DuplicateBox(&'static str),
+    InvalidUtf8,
 }
 
 impl std::fmt::Display for Error {
@@ -21,6 +22,7 @@ impl std::fmt::Display for Error {
             Error::DuplicateBox(name) => {
                 write!(f, "duplicate child box '{}'", name)
             }
+            Error::InvalidUtf8 => write!(f, "invalid UTF-8 string in box body"),
         }
     }
 }

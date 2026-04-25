@@ -131,6 +131,25 @@ fn run(label: &str, path: &str) {
                     i, aux, s.entry_count, width
                 );
             }
+            Mp4Box::Meta(m) => {
+                let ht = m.hdlr.handler_type.to_be_bytes();
+                let ht_str = std::str::from_utf8(&ht).unwrap_or("????");
+                println!(
+                    "[{}] type: 'meta', hdlr.handler_type: '{}', hdlr.name: {:?}, others: {}",
+                    i,
+                    ht_str,
+                    m.hdlr.name,
+                    m.others.len()
+                );
+            }
+            Mp4Box::Hdlr(h) => {
+                let ht = h.handler_type.to_be_bytes();
+                let ht_str = std::str::from_utf8(&ht).unwrap_or("????");
+                println!(
+                    "[{}] type: 'hdlr', handler_type: '{}', name: {:?}",
+                    i, ht_str, h.name
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),
