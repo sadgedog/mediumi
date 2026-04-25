@@ -161,6 +161,22 @@ fn run(label: &str, path: &str) {
                     i, m.header.version, m.timescale, m.duration, secs, m.next_track_id
                 );
             }
+            Mp4Box::Moov(m) => {
+                let secs = if m.mvhd.timescale > 0 {
+                    m.mvhd.duration as f64 / m.mvhd.timescale as f64
+                } else {
+                    0.0
+                };
+                println!(
+                    "[{}] type: 'moov', mvhd.timescale: {}, mvhd.duration: {} ({:.3}s), meta: {}, others: {}",
+                    i,
+                    m.mvhd.timescale,
+                    m.mvhd.duration,
+                    secs,
+                    m.meta.is_some(),
+                    m.others.len()
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),

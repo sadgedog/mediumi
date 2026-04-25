@@ -15,7 +15,7 @@ This project is under active development. APIs may change without notice.
 - [x] mdat (8.1.1) *
 - [ ] moov (8.2.1) *
     - [x] mvhd (8.2.2) *
-    - [ ] meta (8.11.1)
+    - [x] meta (8.11.1)
     - [ ] trak (8.3.1) *
         - [ ] tkhd (8.3.2) *
         - [ ] tref (8.3.3)
