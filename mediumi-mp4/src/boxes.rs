@@ -5,6 +5,7 @@ pub mod mdat;
 pub mod meta;
 pub mod mfhd;
 pub mod moof;
+pub mod mvhd;
 pub mod saio;
 pub mod saiz;
 pub mod sbgp;
@@ -18,8 +19,8 @@ pub mod trun;
 use crate::{
     boxes::{
         error::Error, ftyp::Ftyp, hdlr::Hdlr, mdat::Mdat, meta::Meta, mfhd::Mfhd, moof::Moof,
-        saio::Saio, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd,
-        traf::Traf, trun::Trun,
+        mvhd::Mvhd, saio::Saio, saiz::Saiz, sbgp::Sbgp, sgpd::Sgpd, subs::Subs, tfdt::Tfdt,
+        tfhd::Tfhd, traf::Traf, trun::Trun,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -187,8 +188,9 @@ pub struct UnknownBox {
 #[derive(Debug)]
 pub enum Mp4Box {
     Ftyp(Ftyp),
-    Hdlr(Hdlr),
     Mdat(Mdat),
+    Mvhd(Mvhd),
+    Hdlr(Hdlr),
     Moof(Moof),
     Mfhd(Mfhd),
     Traf(Box<Traf>),
@@ -210,6 +212,7 @@ impl Mp4Box {
         match self {
             Mp4Box::Ftyp(b) => b.write_box(&mut writer),
             Mp4Box::Mdat(b) => b.write_box(&mut writer),
+            Mp4Box::Mvhd(b) => b.write_box(&mut writer),
             Mp4Box::Hdlr(b) => b.write_box(&mut writer),
             Mp4Box::Moof(b) => b.write_box(&mut writer),
             Mp4Box::Mfhd(b) => b.write_box(&mut writer),
@@ -249,6 +252,7 @@ impl Mp4Box {
         let parsed = match &header.box_type {
             BoxType::Ftyp => Mp4Box::Ftyp(Ftyp::parse(body)?),
             BoxType::Mdat => Mp4Box::Mdat(Mdat::parse(body)?),
+            BoxType::Mvhd => Mp4Box::Mvhd(Mvhd::parse(body)?),
             BoxType::Hdlr => Mp4Box::Hdlr(Hdlr::parse(body)?),
             BoxType::Moof => Mp4Box::Moof(Moof::parse(body)?),
             BoxType::Mfhd => Mp4Box::Mfhd(Mfhd::parse(body)?),

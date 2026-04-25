@@ -150,6 +150,17 @@ fn run(label: &str, path: &str) {
                     i, ht_str, h.name
                 );
             }
+            Mp4Box::Mvhd(m) => {
+                let secs = if m.timescale > 0 {
+                    m.duration as f64 / m.timescale as f64
+                } else {
+                    0.0
+                };
+                println!(
+                    "[{}] type: 'mvhd', version: {}, timescale: {}, duration: {} ({:.3}s), next_track_id: {}",
+                    i, m.header.version, m.timescale, m.duration, secs, m.next_track_id
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),
