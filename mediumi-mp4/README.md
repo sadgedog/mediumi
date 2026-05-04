@@ -8,6 +8,47 @@ mediumi-mp4 is a MPEG-4(mp4, fmp4) demuxer and muxer.
 $ cargo build -p mediumi-mp4
 ```
 
+## Run example
+### Generate test mp4 / fmp4 files (using ffmpeg)
+Need to generate non-fragmented and fragmented mp4 to make sample inputs.
+```sh
+$ mkdir -p examples/data && cd examples/data
+
+# Non-fragmented MP4
+$ ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
+    -f lavfi -i sine=frequency=440:duration=3 \
+    -pix_fmt yuv420p \
+    -c:v libx264 -profile:v main -preset medium \
+    -c:a aac -ar 48000 -ac 2 \
+    -movflags +faststart \
+    test.mp4
+
+# Fragmented MP4 (init + media segment)
+$ ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
+    -pix_fmt yuv420p \
+    -c:v libx264 -profile:v main -preset medium -g 30 \
+    -f dash \
+    -seg_duration 10 \
+    -use_template 0 \
+    -use_timeline 0 \
+    -init_seg_name 'test_init.m4s' \
+    -media_seg_name 'test.m4s' \
+    test.mpd
+$ rm -f test.mpd
+```
+
+### Demux
+- Demux mp4 / fmp4
+```sh
+$ cargo run --example demux
+```
+
+### Mux
+- Demux and mux mp4 / fmp4
+```sh
+$ cargo run --example mux
+```
+
 ## Status
 This project is under active development. APIs may change without notice.
 
