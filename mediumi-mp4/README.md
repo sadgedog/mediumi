@@ -13,53 +13,54 @@ This project is under active development. APIs may change without notice.
 
 - [x] ftyp (4.3) *
 - [x] mdat (8.1.1) *
-- [ ] moov (8.2.1) *
+- [x] moov (8.2.1) *
     - [x] mvhd (8.2.2) *
     - [x] meta (8.11.1)
-    - [ ] trak (8.3.1) *
-        - [ ] tkhd (8.3.2) *
-        - [ ] tref (8.3.3)
-        - [ ] trgr (8.3.4)
-        - [ ] edts (8.6.4)
-            - [ ] elst (8.6.6)
-        - [ ] meta (8.11.1)
-        - [ ] mdia (8.4) *
-            - [ ] mdhd (8.4.2) *
-            - [ ] hdlr (8.4.3) *
-            - [ ] elng (8.4.6)
-            - [ ] minf (8.4.4) *
-                - [ ] vmhd (12.1.2)
-                - [ ] smhd (12.2.2)
-                - [ ] hmhd (12.4.2)
-                - [ ] sthd (12.6.2)
-                - [ ] nmhd (8.4.5.2)
-                - [ ] dinf (8.7.1) *
-                    - [ ] dref (8.7.2) *
-                - [ ] stbl (8.5.1) *
-                    - [ ] stsd (8.5.2) *
-                    - [ ] stts (8.6.1.2) *
-                    - [ ] ctts (8.6.1.3) *
-                    - [ ] cslg (8.6.1.4)
-                    - [ ] stsc (8.7.4) *
-                    - [ ] stsz (8.7.3.2)
-                    - [ ] stz2 (8.7.3.3)
-                    - [ ] stco (8.7.5) *
-                    - [ ] co64 (8.7.5)
-                    - [ ] stss (8.6.2)
-                    - [ ] stsh (8.6.3)
-                    - [ ] padb (8.7.6)
-                    - [ ] stdp (8.7.6)
-                    - [ ] sdtp (8.6.4)
-                    - [ ] sbgp (8.9.2)
-                    - [ ] sgpd (8.9.3)
-                    - [ ] subs (8.7.7)
-                    - [ ] saiz (8.7.8)
-                    - [ ] saio (8.7.9)
-            - [ ] udta (8.10.1)
-        - [ ] mvex (8.8.1)
-            - [ ] mehd (8.8.2)
-            - [ ] trex (8.8.3) *
-            - [ ] leva (8.8.13)
+    - [x] trak (8.3.1) *
+        - [x] tkhd (8.3.2) *
+        - [x] tref (8.3.3)
+        - [x] trgr (8.3.4)
+        - [x] edts (8.6.4)
+            - [x] elst (8.6.6)
+        - [x] meta (8.11.1)
+        - [x] mdia (8.4) *
+            - [x] mdhd (8.4.2) *
+            - [x] hdlr (8.4.3) *
+            - [x] elng (8.4.6)
+            - [x] minf (8.4.4) *
+                - [x] vmhd (12.1.2)
+                - [x] smhd (12.2.2)
+                - [x] hmhd (12.4.2)
+                - [x] sthd (12.6.2)
+                - [x] nmhd (8.4.5.2)
+                - [x] dinf (8.7.1) *
+                    - [x] dref (8.7.2) *
+                - [x] stbl (8.5.1) *
+                    - [x] stsd (8.5.2) *
+                    - [x] stts (8.6.1.2) *
+                    - [x] ctts (8.6.1.3) *
+                    - [x] cslg (8.6.1.4)
+                    - [x] stsc (8.7.4) *
+                    - [x] stsz (8.7.3.2)
+                    - [x] stz2 (8.7.3.3)
+                    - [x] stco (8.7.5) *
+                    - [x] co64 (8.7.5)
+                    - [x] stss (8.6.2)
+                    - [x] stsh (8.6.3)
+                    - [x] padb (8.7.6)
+                    - [x] stdp (8.7.6)
+                    - [x] sdtp (8.6.4)
+                    - [x] sbgp (8.9.2)
+                    - [x] sgpd (8.9.3)
+                    - [x] subs (8.7.7)
+                    - [x] saiz (8.7.8)
+                    - [x] saio (8.7.9)
+        - [x] udta (8.10.1)
+    - [x] mvex (8.8.1)
+        - [x] mehd (8.8.2)
+        - [x] trex (8.8.3) *
+        - [x] leva (8.8.13)
+    - [x] udta (8.10.1)
 - [x] moof (8.8.4)
     - [x] mfhd (8.8.5)
     - [x] meta (8.11.1)

@@ -7,6 +7,7 @@ pub enum Error {
     MissingRequiredBox(&'static str),
     DuplicateBox(&'static str),
     InvalidUtf8,
+    UnsupportedValue { field: &'static str, value: u32 },
 }
 
 impl std::fmt::Display for Error {
@@ -23,6 +24,9 @@ impl std::fmt::Display for Error {
                 write!(f, "duplicate child box '{}'", name)
             }
             Error::InvalidUtf8 => write!(f, "invalid UTF-8 string in box body"),
+            Error::UnsupportedValue { field, value } => {
+                write!(f, "unsupported value for {}: {}", field, value)
+            }
         }
     }
 }
