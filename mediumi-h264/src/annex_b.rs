@@ -1,4 +1,4 @@
-//! Annex.B format parser
+//! Annex.B format parser / serializer.
 //!
 //! Annex.B format construction
 //! ```text
@@ -36,6 +36,14 @@ pub struct AnnexB {
 }
 
 impl AnnexB {
+    /// Serialize the start code and NAL unit back into a byte stream
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(self.start_code.as_bytes());
+        buf.extend_from_slice(&self.nal_unit.to_bytes());
+        buf
+    }
+
     /// Parse a single Annex B entry from a byte slice starting with a start code
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
         if data.len() < 4 {
@@ -58,14 +66,6 @@ impl AnnexB {
             let value = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
             Err(Error::InvalidStartCode(value))
         }
-    }
-
-    /// Serialize the start code and NAL unit back into a byte stream
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        buf.extend_from_slice(self.start_code.as_bytes());
-        buf.extend_from_slice(&self.nal_unit.to_bytes());
-        buf
     }
 }
 

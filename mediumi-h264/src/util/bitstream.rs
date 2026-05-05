@@ -110,6 +110,20 @@ impl<'a> BitstreamReader<'a> {
         (self.data.len() - self.byte_offset) * 8 - self.bit_offset as usize
     }
 
+    /// Read `n` bytes from slice
+    pub fn read_slice(&mut self, n: usize) -> Result<&'a [u8], Error> {
+        if self.bit_offset != 0 {
+            return Err(Error::DataTooShort(n * 8, self.remaining_bits()));
+        }
+        let end = self.byte_offset + n;
+        if end > self.data.len() {
+            return Err(Error::DataTooShort(n * 8, self.remaining_bits()));
+        }
+        let s = &self.data[self.byte_offset..end];
+        self.byte_offset = end;
+        Ok(s)
+    }
+
     pub fn has_more_rbsp_data(&self) -> bool {
         let remaining = self.remaining_bits();
         if remaining == 0 {
@@ -333,6 +347,30 @@ mod tests {
         for &v in &values {
             assert_eq!(reader.read_ue().unwrap(), v);
         }
+    }
+
+    #[test]
+    fn test_read_slice_aligned() {
+        let data: &[u8] = &[0x11, 0x22, 0x33, 0x44, 0x55];
+        let mut reader = BitstreamReader::new(data);
+        let s = reader.read_slice(2).unwrap();
+        assert_eq!(s, &[0x11, 0x22]);
+        assert_eq!(reader.byte_offset, 2);
+        assert_eq!(reader.bit_offset, 0);
+
+        assert_eq!(s.as_ptr(), data.as_ptr());
+
+        let s2 = reader.read_slice(3).unwrap();
+        assert_eq!(s2, &[0x33, 0x44, 0x55]);
+        assert_eq!(reader.byte_offset, 5);
+    }
+
+    #[test]
+    fn test_read_slice_too_short() {
+        let data: &[u8] = &[0x11, 0x22];
+        let mut reader = BitstreamReader::new(data);
+        let err = reader.read_slice(3).unwrap_err();
+        matches!(err, Error::DataTooShort(_, _));
     }
 
     #[test]
