@@ -6,6 +6,7 @@ It provides the following features.
 
 ### Features
 - Media container demuxer and muxer for the following containers
+    - MP4 / Fragmented MP4
     - MPEG2-TS
 - Parser and Serializers and for the following codecs
     - AAC (ADTS)
@@ -28,6 +29,7 @@ $ make build-all     # Build all crates
 $ make build-aac     # Build specific crate
 $ make build-ac3
 $ make build-h264
+$ make build-mp4
 $ make build-mpeg2ts
 ```
 
@@ -37,6 +39,7 @@ $ make test-all     # Test all crates
 $ make test-aac     # Test specific crate
 $ make test-ac3
 $ make test-h264
+$ make test-mp4
 $ make test-mpeg2ts
 ```
 
@@ -47,6 +50,8 @@ $ make test-mpeg2ts
     - ATSC A/52
 - H.264
     - ISO/IEC 14496-10
+- MP4
+    - ISO/IEC 14496-12
 - MPEG2-TS
     - ISO/IEC 13818-1
 

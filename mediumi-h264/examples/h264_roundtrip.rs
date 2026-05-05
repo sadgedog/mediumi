@@ -8,9 +8,9 @@ fn main() {
     .expect("failed to read input h264 file");
 
     // parse
-    let result = Processor::parse(&input).expect("failed to parse");
+    let result = Processor::from_annex_b(&input).expect("failed to parse");
     // write
-    let output = result.to_bytes().unwrap();
+    let output = result.to_annex_b().unwrap();
 
     // length check
     assert_eq!(

@@ -10,6 +10,9 @@ build-ac3:
 build-h264:
 	cargo build -p mediumi-h264
 
+build-mp4:
+	cargo build -p mediumi-mp4
+
 build-mpeg2ts:
 	cargo build -p mediumi-mpeg2ts
 
@@ -30,6 +33,9 @@ test-ac3:
 
 test-h264:
 	cargo test -p mediumi-h264
+
+test-mp4:
+	cargo test -p mediumi-mp4
 
 test-mpeg2ts:
 	cargo test -p mediumi-mpeg2ts

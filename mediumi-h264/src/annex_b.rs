@@ -14,7 +14,7 @@ use crate::{error::Error, nal::NalUnit};
 const START_CODE_3B: &[u8; 3] = &[0x00, 0x00, 0x01];
 const START_CODE_4B: &[u8; 4] = &[0x00, 0x00, 0x00, 0x01];
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StartCode {
     ThreeBytes, // [0x00, 0x00, 0x01]
     FourBytes,  // [0x00, 0x00, 0x00, 0x01]
