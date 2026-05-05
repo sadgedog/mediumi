@@ -1,0 +1,12 @@
+[package]
+name = "mediumi-mp4"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "mp4, fmp4 muxer/demuxer"
+readme = "README.md"
+repository.workspace = true
+license = "MIT"
+keywords = ["multimedia", "container", "video", "audio"]
+categories = ["multimedia", "multimedia::video", "multimedia::audio"]

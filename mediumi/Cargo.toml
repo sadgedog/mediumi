@@ -15,4 +15,5 @@ categories = ["multimedia", "multimedia::video", "multimedia::audio"]
 mediumi-aac = { path = "../mediumi-aac", version = "0.1.0" }
 mediumi-ac3 = { path = "../mediumi-ac3", version = "0.1.0" }
 mediumi-h264 = { path = "../mediumi-h264", version = "0.1.0" }
+mediumi-mp4 = { path = "../mediumi-mp4", version = "0.1.0" }
 mediumi-mpeg2ts = { path = "../mediumi-mpeg2ts", version = "0.1.0" }

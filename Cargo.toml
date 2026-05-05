@@ -4,6 +4,7 @@ members = [
     "mediumi-aac",
     "mediumi-ac3",
     "mediumi-h264",
+    "mediumi-mp4",
     "mediumi-mpeg2ts",
 ]
 resolver = "2"

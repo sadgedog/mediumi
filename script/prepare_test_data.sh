@@ -15,6 +15,7 @@ mkdir -p "$ROOT_DIR/mediumi-aac/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-ac3/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-h264/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-mpeg2ts/examples/data"
+mkdir -p "$ROOT_DIR/mediumi-mp4/examples/data"
 
 # AAC (ADTS)
 echo "Generating test.aac ..."
@@ -43,5 +44,32 @@ ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 \
     -c:a aac -ar 48000 -ac 2 \
     -f mpegts \
     "$ROOT_DIR/mediumi-mpeg2ts/examples/data/test.ts"
+
+# MP4 (non-fragmented)
+echo "Generating test.mp4 ..."
+ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
+    -f lavfi -i sine=frequency=440:duration=3 \
+    -pix_fmt yuv420p \
+    -c:v libx264 -profile:v main -preset medium \
+    -c:a aac -ar 48000 -ac 2 \
+    -movflags +faststart \
+    "$ROOT_DIR/mediumi-mp4/examples/data/test.mp4"
+
+# MP$ (fragmented)
+echo "Generating test_init.m4s and test.m4s ..."
+(
+    cd "$ROOT_DIR/mediumi-mp4/examples/data"
+    ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
+        -pix_fmt yuv420p \
+        -c:v libx264 -profile:v main -preset medium -g 30 \
+        -f dash \
+        -seg_duration 10 \
+        -use_template 0 \
+        -use_timeline 0 \
+        -init_seg_name 'test_init.m4s' \
+        -media_seg_name 'test.m4s' \
+        test.mpd
+    rm -f test.mpd
+)
 
 echo "All test data generated."
