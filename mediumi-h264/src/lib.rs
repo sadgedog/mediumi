@@ -1,4 +1,5 @@
-//! H.264 codec processor for parsing and serializing Annex.B byte streams.
+//! H.264 codec processor for parsing and serializing Annex.B and AVCC (length-prefixed)
+//! byte streams.
 //!
 //! # Example (Annex B)
 //!
@@ -9,6 +10,29 @@
 //! let data = std::fs::read("input.h264")?;
 //! let processor = Processor::from_annex_b(&data)?;
 //! let output = processor.to_annex_b()?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Example (Length-prefixed / AVCC)
+//!
+//! `data` is a length-prefixed NAL byte stream (the kind that lives inside an mp4
+//! `mdat`); the corresponding `AvccConfig` carries the SPS/PPS NAL units and the
+//! `lengthSizeMinusOne` width.
+//!
+//! ```no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use mediumi_h264::{Processor, avcc::AvccConfig};
+//!
+//! // length-prefixed NAL data (each NAL = 4-byte BE length + NAL bytes).
+//! let data: Vec<u8> = vec![/* length-prefixed NAL units */];
+//! // AVCDecoderConfigurationRecord bytes (= the body of the mp4 `avcC` box).
+//! let avcc_bytes: Vec<u8> = vec![/* avcC config bytes */];
+//! let cfg = AvccConfig::parse(&avcc_bytes)?;
+//!
+//! let samples: &[&[u8]] = &[&data];
+//! let processor = Processor::from_avcc(samples, &cfg)?;
+//! let (output, new_cfg) = processor.to_avcc(&cfg)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -117,7 +141,7 @@ impl Processor {
             match nal {
                 NalData::Sps(_, _, sps) => {
                     config.avc_profile_indication = sps.profile_idc;
-                    config.profile_compatibility = sps.constraint_flags;
+                    config.profile_compatibility = sps.constraint_flags << 2;
                     config.avc_level_indication = sps.level_idc;
                     config.sps_nalus.push(bytes);
                 }

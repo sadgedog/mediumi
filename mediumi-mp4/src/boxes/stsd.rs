@@ -7,7 +7,52 @@ use crate::{
 #[derive(Debug)]
 pub struct Stsd {
     pub header: FullBoxHeader,
-    pub entries: Vec<Vec<u8>>,
+    pub entries: Vec<SampleEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SampleEntry {
+    pub box_type: [u8; 4],
+    pub data_reference_index: u16,
+    pub kind: SampleEntryKind,
+    pub nested: Vec<NestedBox>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SampleEntryKind {
+    Visual(VisualSampleEntry),
+    Audio(AudioSampleEntry),
+    /// Unsupported codecs
+    Other {
+        body: Vec<u8>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VisualSampleEntry {
+    pub pre_defined1: u16,
+    pub width: u16,
+    pub height: u16,
+    pub horizresolution: u32,
+    pub vertresolution: u32,
+    pub frame_count: u16,
+    pub compressorname: String,
+    pub depth: u16,
+    pub pre_defined2: i16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioSampleEntry {
+    pub channelcount: u16,
+    pub samplesize: u16,
+    pub pre_defined: u16,
+    pub samplerate: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NestedBox {
+    pub box_type: [u8; 4],
+    pub body: Vec<u8>,
 }
 
 impl BaseBox for Stsd {
@@ -17,57 +62,38 @@ impl BaseBox for Stsd {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
-            for &b in e {
-                writer.write_bits(b as u32, 8);
-            }
+            e.to_bytes(writer);
         }
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
         let mut reader = BitstreamReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
-        let entry_count = reader.read_bits(32)?;
-        let (rest, _) = reader.read_remaining_bytes();
+        let entry_count = reader.read_bits(32)? as usize;
 
-        let mut entries: Vec<Vec<u8>> = Vec::with_capacity(entry_count as usize);
-        let mut offset = 0usize;
+        let mut entries: Vec<SampleEntry> = Vec::with_capacity(entry_count);
         for _ in 0..entry_count {
-            if rest.len() < offset + 8 {
-                return Err(Error::DataTooShort);
-            }
-            let size = u32::from_be_bytes([
-                rest[offset],
-                rest[offset + 1],
-                rest[offset + 2],
-                rest[offset + 3],
-            ]) as usize;
-            let take = match size {
-                0 => rest.len() - offset,
+            // Box header: size (32 bits) + type (4 bytes)
+            let size_field = reader.read_bits(32)?;
+            let box_type: [u8; 4] = reader
+                .read_slice(4)?
+                .try_into()
+                .map_err(|_| Error::DataTooShort)?;
+
+            let body_len = match size_field {
+                0 => reader.remaining_bits() / 8,
                 1 => {
-                    if rest.len() < offset + 16 {
-                        return Err(Error::DataTooShort);
-                    }
-                    let high = u32::from_be_bytes([
-                        rest[offset + 8],
-                        rest[offset + 9],
-                        rest[offset + 10],
-                        rest[offset + 11],
-                    ]) as u64;
-                    let low = u32::from_be_bytes([
-                        rest[offset + 12],
-                        rest[offset + 13],
-                        rest[offset + 14],
-                        rest[offset + 15],
-                    ]) as u64;
-                    ((high << 32) | low) as usize
+                    let high = reader.read_bits(32)? as u64;
+                    let low = reader.read_bits(32)? as u64;
+                    let total = ((high << 32) | low) as usize;
+                    total.checked_sub(16).ok_or(Error::DataTooShort)?
                 }
-                _ => size,
+                _ => (size_field as usize)
+                    .checked_sub(8)
+                    .ok_or(Error::DataTooShort)?,
             };
-            if rest.len() < offset + take {
-                return Err(Error::DataTooShort);
-            }
-            entries.push(rest[offset..offset + take].to_vec());
-            offset += take;
+            let body = reader.read_slice(body_len)?;
+            entries.push(SampleEntry::parse(box_type, body)?);
         }
         Ok(Self { header, entries })
     }
@@ -82,28 +108,357 @@ impl FullBox for Stsd {
     }
 }
 
+impl SampleEntry {
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        // 8(box header) + 8(SampleEntry common) + ...
+        let total_size =
+            8 + 8 + self.kind_size() + self.nested.iter().map(|n| 8 + n.body.len()).sum::<usize>();
+
+        writer.write_bits(total_size as u32, 32);
+        for &b in &self.box_type {
+            writer.write_bits(b as u32, 8);
+        }
+        // SampleEntry common
+        for _ in 0..6 {
+            writer.write_bits(0, 8);
+        }
+        writer.write_bits(self.data_reference_index as u32, 16);
+
+        match &self.kind {
+            SampleEntryKind::Visual(v) => v.to_bytes(writer),
+            SampleEntryKind::Audio(a) => a.to_bytes(writer),
+            SampleEntryKind::Other { body } => {
+                for &b in body {
+                    writer.write_bits(b as u32, 8);
+                }
+            }
+        }
+
+        for n in &self.nested {
+            let nbox_size = 8 + n.body.len();
+            writer.write_bits(nbox_size as u32, 32);
+            for &b in &n.box_type {
+                writer.write_bits(b as u32, 8);
+            }
+            for &b in &n.body {
+                writer.write_bits(b as u32, 8);
+            }
+        }
+    }
+
+    fn parse(box_type: [u8; 4], body: &[u8]) -> Result<Self, Error> {
+        let mut reader = BitstreamReader::new(body);
+        // SampleEntry common: 6 reserved + 2 data_reference_index.
+        let _reserved = reader.read_slice(6)?;
+        let data_reference_index = reader.read_bits(16)? as u16;
+
+        match &box_type {
+            b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp08" | b"vp09" | b"mp4v" => {
+                let visual = VisualSampleEntry::parse(&mut reader)?;
+                let nested = parse_nested_boxes(&mut reader)?;
+                Ok(Self {
+                    box_type,
+                    data_reference_index,
+                    kind: SampleEntryKind::Visual(visual),
+                    nested,
+                })
+            }
+            b"mp4a" | b"ac-3" | b"ec-3" | b"opus" | b"alac" | b"flaC" => {
+                let audio = AudioSampleEntry::parse(&mut reader)?;
+                let nested = parse_nested_boxes(&mut reader)?;
+                Ok(Self {
+                    box_type,
+                    data_reference_index,
+                    kind: SampleEntryKind::Audio(audio),
+                    nested,
+                })
+            }
+            _ => {
+                // Unsupported codec family — keep the post-common body opaque.
+                let (rest, _) = reader.read_remaining_bytes();
+                Ok(Self {
+                    box_type,
+                    data_reference_index,
+                    kind: SampleEntryKind::Other { body: rest },
+                    nested: Vec::new(),
+                })
+            }
+        }
+    }
+
+    fn kind_size(&self) -> usize {
+        match &self.kind {
+            SampleEntryKind::Visual(_) => 70,
+            SampleEntryKind::Audio(_) => 20,
+            SampleEntryKind::Other { body } => body.len(),
+        }
+    }
+}
+
+fn parse_nested_boxes(reader: &mut BitstreamReader) -> Result<Vec<NestedBox>, Error> {
+    let mut nested = Vec::new();
+    while reader.remaining_bits() >= 64 {
+        // box header: size (32) + type (4)
+        let size = reader.read_bits(32)? as usize;
+        let box_type: [u8; 4] = reader
+            .read_slice(4)?
+            .try_into()
+            .map_err(|_| Error::DataTooShort)?;
+        if size < 8 {
+            return Err(Error::DataTooShort);
+        }
+        let body = reader.read_slice(size - 8)?.to_vec();
+        nested.push(NestedBox { box_type, body });
+    }
+    if reader.remaining_bits() != 0 {
+        return Err(Error::DataTooShort);
+    }
+    Ok(nested)
+}
+
+impl VisualSampleEntry {
+    fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+        let pre_defined1 = reader.read_bits(16)? as u16;
+        let _reserved = reader.read_bits(16)?; // reserved (= 0)
+        for _ in 0..3 {
+            let _ = reader.read_bits(32)?; // pre_defined[3] (= 0)
+        }
+        let width = reader.read_bits(16)? as u16;
+        let height = reader.read_bits(16)? as u16;
+        let horizresolution = reader.read_bits(32)?;
+        let vertresolution = reader.read_bits(32)?;
+        let _reserved = reader.read_bits(32)?; // reserved (= 0)
+        let frame_count = reader.read_bits(16)? as u16;
+
+        // compressorname: 32-byte Pascal string (1 byte length + 31 byte content padded with 0).
+        let cn = reader.read_slice(32)?;
+        let len = (cn[0] as usize).min(31);
+        let compressorname = String::from_utf8_lossy(&cn[1..1 + len]).into_owned();
+
+        let depth = reader.read_bits(16)? as u16;
+        let pre_defined2 = reader.read_bits(16)? as i16;
+        Ok(Self {
+            pre_defined1,
+            width,
+            height,
+            horizresolution,
+            vertresolution,
+            frame_count,
+            compressorname,
+            depth,
+            pre_defined2,
+        })
+    }
+
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        writer.write_bits(self.pre_defined1 as u32, 16);
+        writer.write_bits(0, 16); // reserved
+        for _ in 0..3 {
+            writer.write_bits(0, 32); // pre_defined[3]
+        }
+        writer.write_bits(self.width as u32, 16);
+        writer.write_bits(self.height as u32, 16);
+        writer.write_bits(self.horizresolution, 32);
+        writer.write_bits(self.vertresolution, 32);
+        writer.write_bits(0, 32); // reserved
+        writer.write_bits(self.frame_count as u32, 16);
+
+        let cn = self.compressorname.as_bytes();
+        let len = cn.len().min(31);
+        let mut buf = [0u8; 32];
+        buf[0] = len as u8;
+        buf[1..1 + len].copy_from_slice(&cn[..len]);
+        for byte in buf {
+            writer.write_bits(byte as u32, 8);
+        }
+
+        writer.write_bits(self.depth as u32, 16);
+        writer.write_bits((self.pre_defined2 as u16) as u32, 16);
+    }
+}
+
+impl AudioSampleEntry {
+    fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+        for _ in 0..2 {
+            let _ = reader.read_bits(32)?; // reserved × 2 (= 0)
+        }
+        let channelcount = reader.read_bits(16)? as u16;
+        let samplesize = reader.read_bits(16)? as u16;
+        let pre_defined = reader.read_bits(16)? as u16;
+        let _reserved = reader.read_bits(16)?; // reserved (= 0)
+        let samplerate = reader.read_bits(32)?;
+        Ok(Self {
+            channelcount,
+            samplesize,
+            pre_defined,
+            samplerate,
+        })
+    }
+
+    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+        for _ in 0..2 {
+            writer.write_bits(0, 32); // reserved × 2
+        }
+        writer.write_bits(self.channelcount as u32, 16);
+        writer.write_bits(self.samplesize as u32, 16);
+        writer.write_bits(self.pre_defined as u32, 16);
+        writer.write_bits(0, 16); // reserved
+        writer.write_bits(self.samplerate, 32);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn box_bytes(box_type: &[u8; 4], body: &[u8]) -> Vec<u8> {
+        let size = 8 + body.len();
+        let mut out = Vec::with_capacity(size);
+        out.extend_from_slice(&(size as u32).to_be_bytes());
+        out.extend_from_slice(box_type);
+        out.extend_from_slice(body);
+        out
+    }
+
     #[test]
-    fn test_stsd_roundtrip() {
-        let entry = vec![
-            0x00, 0x00, 0x00, 0x10, b'a', b'v', b'c', b'1', // header
-            0, 0, 0, 0, 0, 0, 0, 0,
-        ];
-        let src = Stsd {
-            header: FullBoxHeader {
-                version: 0,
-                flags: 0,
-            },
-            entries: vec![entry.clone()],
-        };
-        let mut w = BitstreamWriter::new();
-        src.to_bytes(&mut w);
-        let bytes = w.finish();
-        let parsed = Stsd::parse(&bytes).expect("parse stsd");
+    fn other_entry_roundtrip() {
+        // Unknown sample entry: SampleEntry common (8) + opaque body.
+        let mut body = Vec::new();
+        body.extend_from_slice(&[0u8; 6]); // reserved
+        body.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
+        body.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]); // opaque
+
+        let entry_bytes = box_bytes(b"unkn", &body);
+        let stsd_body = build_stsd_body(std::slice::from_ref(&entry_bytes));
+        let parsed = Stsd::parse(&stsd_body).expect("parse");
         assert_eq!(parsed.entries.len(), 1);
-        assert_eq!(parsed.entries[0], entry);
+
+        let entry = &parsed.entries[0];
+        assert_eq!(&entry.box_type, b"unkn");
+        assert_eq!(entry.data_reference_index, 1);
+        match &entry.kind {
+            SampleEntryKind::Other { body } => assert_eq!(body, &[0xDE, 0xAD, 0xBE, 0xEF]),
+            _ => panic!("expected Other"),
+        }
+        assert!(entry.nested.is_empty());
+
+        let mut w = BitstreamWriter::new();
+        parsed.to_bytes(&mut w);
+        assert_eq!(w.finish(), stsd_body);
+    }
+
+    #[test]
+    fn avc1_entry_roundtrip() {
+        // avc1 sample entry with VisualSampleEntry header + 1 nested avcC box.
+        let mut visual = Vec::new();
+        visual.extend_from_slice(&[0u8; 6]); // SampleEntry reserved
+        visual.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index = 1
+
+        // VisualSampleEntry (70 bytes)
+        visual.extend_from_slice(&0u16.to_be_bytes()); // pre_defined1
+        visual.extend_from_slice(&0u16.to_be_bytes()); // reserved
+        for _ in 0..3 {
+            visual.extend_from_slice(&0u32.to_be_bytes()); // pre_defined[3]
+        }
+        visual.extend_from_slice(&1280u16.to_be_bytes()); // width
+        visual.extend_from_slice(&720u16.to_be_bytes()); // height
+        visual.extend_from_slice(&0x00480000u32.to_be_bytes()); // horizres = 72 dpi
+        visual.extend_from_slice(&0x00480000u32.to_be_bytes()); // vertres
+        visual.extend_from_slice(&0u32.to_be_bytes()); // reserved
+        visual.extend_from_slice(&1u16.to_be_bytes()); // frame_count = 1
+        // compressorname: length=4 "h264" + 27 zeros
+        visual.push(4u8);
+        visual.extend_from_slice(b"h264");
+        visual.extend(std::iter::repeat_n(0u8, 27));
+        visual.extend_from_slice(&0x0018u16.to_be_bytes()); // depth = 24
+        visual.extend_from_slice(&(-1i16).to_be_bytes()); // pre_defined2 = -1
+
+        // 1 nested avcC box (8 byte header + 4 byte body)
+        visual.extend_from_slice(&12u32.to_be_bytes());
+        visual.extend_from_slice(b"avcC");
+        visual.extend_from_slice(&[0x01, 0x42, 0xC0, 0x1E]);
+
+        let entry_bytes = box_bytes(b"avc1", &visual);
+        let stsd_body = build_stsd_body(std::slice::from_ref(&entry_bytes));
+        let parsed = Stsd::parse(&stsd_body).expect("parse");
+
+        let entry = &parsed.entries[0];
+        assert_eq!(&entry.box_type, b"avc1");
+        assert_eq!(entry.data_reference_index, 1);
+        match &entry.kind {
+            SampleEntryKind::Visual(v) => {
+                assert_eq!(v.width, 1280);
+                assert_eq!(v.height, 720);
+                assert_eq!(v.horizresolution, 0x00480000);
+                assert_eq!(v.frame_count, 1);
+                assert_eq!(v.compressorname, "h264");
+                assert_eq!(v.depth, 0x0018);
+                assert_eq!(v.pre_defined2, -1);
+            }
+            _ => panic!("expected Visual"),
+        }
+        assert_eq!(entry.nested.len(), 1);
+        assert_eq!(&entry.nested[0].box_type, b"avcC");
+        assert_eq!(entry.nested[0].body, vec![0x01, 0x42, 0xC0, 0x1E]);
+
+        let mut w = BitstreamWriter::new();
+        parsed.to_bytes(&mut w);
+        assert_eq!(w.finish(), stsd_body);
+    }
+
+    #[test]
+    fn mp4a_entry_roundtrip() {
+        // mp4a sample entry with AudioSampleEntry header + 1 nested esds box.
+        let mut audio = Vec::new();
+        audio.extend_from_slice(&[0u8; 6]); // reserved
+        audio.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
+
+        // AudioSampleEntry (20 bytes)
+        for _ in 0..2 {
+            audio.extend_from_slice(&0u32.to_be_bytes()); // reserved[2]
+        }
+        audio.extend_from_slice(&2u16.to_be_bytes()); // channelcount = 2
+        audio.extend_from_slice(&16u16.to_be_bytes()); // samplesize = 16
+        audio.extend_from_slice(&0u16.to_be_bytes()); // pre_defined
+        audio.extend_from_slice(&0u16.to_be_bytes()); // reserved
+        audio.extend_from_slice(&((48000u32) << 16).to_be_bytes()); // samplerate (16.16)
+
+        // 1 nested esds box
+        audio.extend_from_slice(&10u32.to_be_bytes());
+        audio.extend_from_slice(b"esds");
+        audio.extend_from_slice(&[0x42, 0x00]);
+
+        let entry_bytes = box_bytes(b"mp4a", &audio);
+        let stsd_body = build_stsd_body(&[entry_bytes]);
+        let parsed = Stsd::parse(&stsd_body).expect("parse");
+
+        let entry = &parsed.entries[0];
+        assert_eq!(&entry.box_type, b"mp4a");
+        match &entry.kind {
+            SampleEntryKind::Audio(a) => {
+                assert_eq!(a.channelcount, 2);
+                assert_eq!(a.samplesize, 16);
+                assert_eq!(a.samplerate, 48000u32 << 16);
+            }
+            _ => panic!("expected Audio"),
+        }
+        assert_eq!(entry.nested.len(), 1);
+        assert_eq!(&entry.nested[0].box_type, b"esds");
+
+        let mut w = BitstreamWriter::new();
+        parsed.to_bytes(&mut w);
+        assert_eq!(w.finish(), stsd_body);
+    }
+
+    fn build_stsd_body(entries: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = Vec::new();
+        // FullBoxHeader (version=0, flags=0)
+        out.extend_from_slice(&0u32.to_be_bytes());
+        // entry_count
+        out.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+        for e in entries {
+            out.extend_from_slice(e);
+        }
+        out
     }
 }

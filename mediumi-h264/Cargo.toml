@@ -10,3 +10,6 @@ repository.workspace = true
 license = "MIT"
 keywords = ["codec", "video"]
 categories = ["multimedia", "multimedia::video"]
+
+[dev-dependencies]
+mediumi-mp4 = { path = "../mediumi-mp4" }

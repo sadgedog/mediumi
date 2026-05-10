@@ -76,24 +76,25 @@ impl AvccConfig {
         let num_of_pps = reader.read_bits(8)? as usize;
         let pps_nalus = read_nal_array(&mut reader, num_of_pps)?;
 
-        let extension = if !matches!(avc_profile_indication, 66 | 77 | 88) {
-            let _reserved = reader.read_bits(6)?;
-            let chroma_format = reader.read_bits(2)? as u8;
-            let _reserved = reader.read_bits(5)?;
-            let bit_depth_luma_minus8 = reader.read_bits(3)? as u8;
-            let _reserved = reader.read_bits(5)?;
-            let bit_depth_chroma_minus8 = reader.read_bits(3)? as u8;
-            let num_of_sps_ext = reader.read_bits(8)? as usize;
-            let sps_ext_nalus = read_nal_array(&mut reader, num_of_sps_ext)?;
-            Some(Extension {
-                chroma_format,
-                bit_depth_luma_minus8,
-                bit_depth_chroma_minus8,
-                sps_ext_nalus,
-            })
-        } else {
-            None
-        };
+        let extension =
+            if !matches!(avc_profile_indication, 66 | 77 | 88) && reader.remaining_bits() >= 32 {
+                let _reserved = reader.read_bits(6)?;
+                let chroma_format = reader.read_bits(2)? as u8;
+                let _reserved = reader.read_bits(5)?;
+                let bit_depth_luma_minus8 = reader.read_bits(3)? as u8;
+                let _reserved = reader.read_bits(5)?;
+                let bit_depth_chroma_minus8 = reader.read_bits(3)? as u8;
+                let num_of_sps_ext = reader.read_bits(8)? as usize;
+                let sps_ext_nalus = read_nal_array(&mut reader, num_of_sps_ext)?;
+                Some(Extension {
+                    chroma_format,
+                    bit_depth_luma_minus8,
+                    bit_depth_chroma_minus8,
+                    sps_ext_nalus,
+                })
+            } else {
+                None
+            };
 
         Ok(Self {
             configuration_version,
