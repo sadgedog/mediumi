@@ -16,30 +16,26 @@
 //!
 //! # Example (Length-prefixed / AVCC)
 //!
-//! `data` is a length-prefixed NAL byte stream (the kind that lives inside an mp4
-//! `mdat`); the corresponding `AvccConfig` carries the SPS/PPS NAL units and the
-//! `lengthSizeMinusOne` width.
-//!
 //! ```no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use mediumi_h264::{Processor, avcc::AvccConfig};
+//! use mediumi_h264::Processor;
 //!
-//! // length-prefixed NAL data (each NAL = 4-byte BE length + NAL bytes).
 //! let data: Vec<u8> = vec![/* length-prefixed NAL units */];
-//! // AVCDecoderConfigurationRecord bytes (= the body of the mp4 `avcC` box).
-//! let avcc_bytes: Vec<u8> = vec![/* avcC config bytes */];
-//! let cfg = AvccConfig::parse(&avcc_bytes)?;
+//! let length_size_minus_one: u8 = 3; // 4-byte length prefix
+//! let sps_nalus: Vec<Vec<u8>> = vec![/* SPS NAL bytes */];
+//! let pps_nalus: Vec<Vec<u8>> = vec![/* PPS NAL bytes */];
 //!
 //! let samples: &[&[u8]] = &[&data];
-//! let processor = Processor::from_avcc(samples, &cfg)?;
-//! let (output, new_cfg) = processor.to_avcc(&cfg)?;
+//! let processor =
+//!     Processor::from_avcc(samples, length_size_minus_one, &sps_nalus, &pps_nalus)?;
+//! let out = processor.to_avcc(length_size_minus_one)?;
+//! // out.bytes / out.sps_nalus / out.pps_nalus / out.avc_profile_indication ...
 //! # Ok(())
 //! # }
 //! ```
 
 pub mod annex_b;
 pub mod aud;
-pub mod avcc;
 pub mod error;
 pub mod filler_data;
 pub mod idr;
@@ -58,7 +54,6 @@ pub mod util;
 use crate::{
     annex_b::{StartCode, parse_all},
     aud::Aud,
-    avcc::AvccConfig,
     error::Error,
     filler_data::FillerData,
     idr::Idr,
@@ -73,6 +68,22 @@ use crate::{
     sps_ext::SpsExt,
     util::bitstream::BitstreamReader,
 };
+
+#[derive(Debug, Clone)]
+pub struct AvccOutput {
+    /// Concatenated length-prefixed NAL byte stream (the mp4 `mdat` payload form).
+    pub bytes: Vec<u8>,
+    /// SPS NAL units extracted from `nal_units` (raw NAL bytes incl. EPB).
+    pub sps_nalus: Vec<Vec<u8>>,
+    /// PPS NAL units extracted from `nal_units`.
+    pub pps_nalus: Vec<Vec<u8>>,
+    /// SPS `profile_idc` (= avcC `AVCProfileIndication`).
+    pub avc_profile_indication: u8,
+    /// SPS `constraint_flags` shifted into the avcC `profile_compatibility` byte.
+    pub profile_compatibility: u8,
+    /// SPS `level_idc` (= avcC `AVCLevelIndication`).
+    pub avc_level_indication: u8,
+}
 
 #[derive(Debug)]
 pub enum NalData {
@@ -124,39 +135,47 @@ impl Processor {
     }
 
     /// Serialize length-prefixed NAL Units
-    pub fn to_avcc(&self, base: &AvccConfig) -> Result<(Vec<u8>, AvccConfig), Error> {
-        let mut config = base.clone();
-        config.sps_nalus.clear();
-        config.pps_nalus.clear();
-
-        let length_size = config.nal_length_size();
-        let mut buf = Vec::new();
+    pub fn to_avcc(&self, length_size_minus_one: u8) -> Result<AvccOutput, Error> {
+        let length_size = (length_size_minus_one as usize) + 1;
+        let mut bytes = Vec::new();
+        let mut sps_nalus: Vec<Vec<u8>> = Vec::new();
+        let mut pps_nalus: Vec<Vec<u8>> = Vec::new();
+        let mut avc_profile_indication = 0u8;
+        let mut profile_compatibility = 0u8;
+        let mut avc_level_indication = 0u8;
         let mut last_sps: Option<&Sps> = None;
         let mut last_pps: Option<&Pps> = None;
 
         for nal in &self.nal_units {
-            let Some(bytes) = serialize_nal(nal, &mut last_sps, &mut last_pps)? else {
+            let Some(nal_bytes) = serialize_nal(nal, &mut last_sps, &mut last_pps)? else {
                 continue;
             };
             match nal {
                 NalData::Sps(_, _, sps) => {
-                    config.avc_profile_indication = sps.profile_idc;
-                    config.profile_compatibility = sps.constraint_flags << 2;
-                    config.avc_level_indication = sps.level_idc;
-                    config.sps_nalus.push(bytes);
+                    avc_profile_indication = sps.profile_idc;
+                    profile_compatibility = sps.constraint_flags << 2;
+                    avc_level_indication = sps.level_idc;
+                    sps_nalus.push(nal_bytes);
                 }
                 NalData::Pps(_, _, _) => {
-                    config.pps_nalus.push(bytes);
+                    pps_nalus.push(nal_bytes);
                 }
                 _ => {
-                    let len_bytes = (bytes.len() as u32).to_be_bytes();
-                    buf.extend_from_slice(&len_bytes[4 - length_size..]);
-                    buf.extend_from_slice(&bytes);
+                    let len_be = (nal_bytes.len() as u32).to_be_bytes();
+                    bytes.extend_from_slice(&len_be[4 - length_size..]);
+                    bytes.extend_from_slice(&nal_bytes);
                 }
             }
         }
 
-        Ok((buf, config))
+        Ok(AvccOutput {
+            bytes,
+            sps_nalus,
+            pps_nalus,
+            avc_profile_indication,
+            profile_compatibility,
+            avc_level_indication,
+        })
     }
 
     /// Parse an Annex.B byte stream
@@ -180,12 +199,17 @@ impl Processor {
     }
 
     /// Parse length-prefixed NAL Units
-    pub fn from_avcc(samples: &[&[u8]], config: &AvccConfig) -> Result<Self, Error> {
+    pub fn from_avcc(
+        samples: &[&[u8]],
+        length_size_minus_one: u8,
+        sps_nalus: &[Vec<u8>],
+        pps_nalus: &[Vec<u8>],
+    ) -> Result<Self, Error> {
         let mut nal_units = Vec::new();
         let mut last_sps: Option<Sps> = None;
         let mut last_pps: Option<Pps> = None;
 
-        for sps_bytes in &config.sps_nalus {
+        for sps_bytes in sps_nalus {
             let nal_unit = NalUnit::parse(sps_bytes)?;
             push_nal(
                 &mut nal_units,
@@ -198,7 +222,7 @@ impl Processor {
             )?;
         }
 
-        for pps_bytes in &config.pps_nalus {
+        for pps_bytes in pps_nalus {
             let nal_unit = NalUnit::parse(pps_bytes)?;
             push_nal(
                 &mut nal_units,
@@ -209,7 +233,7 @@ impl Processor {
             )?;
         }
 
-        let length_bits = (config.nal_length_size() * 8) as u8;
+        let length_bits = ((length_size_minus_one as usize + 1) * 8) as u8;
         for sample in samples {
             let mut reader = BitstreamReader::new(sample);
             while reader.remaining_bits() >= length_bits as usize {

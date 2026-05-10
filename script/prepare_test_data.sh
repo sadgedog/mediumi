@@ -16,6 +16,7 @@ mkdir -p "$ROOT_DIR/mediumi-ac3/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-h264/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-mpeg2ts/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-mp4/examples/data"
+mkdir -p "$ROOT_DIR/mediumi/examples/data"
 
 # AAC (ADTS)
 echo "Generating test.aac ..."
@@ -55,7 +56,7 @@ ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
     -movflags +faststart \
     "$ROOT_DIR/mediumi-mp4/examples/data/test.mp4"
 
-# MP$ (fragmented)
+# MP4 (fragmented)
 echo "Generating test_init.m4s and test.m4s ..."
 (
     cd "$ROOT_DIR/mediumi-mp4/examples/data"
@@ -71,5 +72,14 @@ echo "Generating test_init.m4s and test.m4s ..."
         test.mpd
     rm -f test.mpd
 )
+
+# Mirror the container fixtures used by mediumi (umbrella) integration examples.
+# `mediumi/examples/*.rs` consume mp4 + ts data alongside codec crates, so it needs
+# its own copies (the source crates remain self-sufficient too).
+echo "Mirroring fixtures into mediumi/examples/data ..."
+cp "$ROOT_DIR/mediumi-mpeg2ts/examples/data/test.ts"      "$ROOT_DIR/mediumi/examples/data/test.ts"
+cp "$ROOT_DIR/mediumi-mp4/examples/data/test.mp4"         "$ROOT_DIR/mediumi/examples/data/test.mp4"
+cp "$ROOT_DIR/mediumi-mp4/examples/data/test_init.m4s"    "$ROOT_DIR/mediumi/examples/data/test_init.m4s"
+cp "$ROOT_DIR/mediumi-mp4/examples/data/test.m4s"         "$ROOT_DIR/mediumi/examples/data/test.m4s"
 
 echo "All test data generated."

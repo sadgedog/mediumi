@@ -1,7 +1,7 @@
 //! AVCDecoderConfigurationRecord (avcC) parser / serializer.
 
 use crate::{
-    error::Error,
+    boxes::error::Error,
     util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 

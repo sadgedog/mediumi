@@ -20,6 +20,7 @@ pub mod sample_entry;
 pub mod types;
 pub mod util;
 
+pub use boxes::avcc::{AvccConfig, Extension as AvccExtension};
 pub use boxes::error::Error;
 pub use boxes::{BaseBox, BoxHeader, BoxSize, FullBox, Mp4Box};
 pub use sample::{
