@@ -52,6 +52,11 @@ $ cargo run --example mux
 ## Status
 This project is under active development. APIs may change without notice.
 
+### Codec support
+- [x] H.264 (avcC, ISO/IEC 14496-15)
+- [ ] AAC (esds / mp4a, ISO/IEC 14496-14) — not yet supported
+- [ ] AC-3 (dac3, ETSI TS 102 366 Annex F) — not yet supported
+
 - [x] ftyp (4.3) *
 - [x] mdat (8.1.1) *
 - [x] moov (8.2.1) *

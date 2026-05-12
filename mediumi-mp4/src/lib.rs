@@ -15,11 +15,19 @@
 //! ```
 
 pub mod boxes;
+pub mod sample;
+pub mod sample_entry;
 pub mod types;
 pub mod util;
 
+pub use boxes::avcc::{AvccConfig, Extension as AvccExtension};
 pub use boxes::error::Error;
 pub use boxes::{BaseBox, BoxHeader, BoxSize, FullBox, Mp4Box};
+pub use sample::{
+    SampleLocation, handler_fourcc, iter_trafs, iter_traks, track_samples, traf_sample_locations,
+    traf_samples, trak_sample_locations,
+};
+pub use sample_entry::find_codec_config;
 
 pub mod demuxer {
     use crate::boxes::{Mp4Box, error::Error, parse_all};

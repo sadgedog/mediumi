@@ -1,3 +1,4 @@
+pub mod avcc;
 pub mod co64;
 pub mod cslg;
 pub mod ctts;

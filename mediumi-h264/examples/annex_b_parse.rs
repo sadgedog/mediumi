@@ -7,7 +7,7 @@ fn main() {
     ))
     .expect("failed to read input h264 file");
 
-    let result = Processor::parse(&input).expect("failed to parse");
+    let result = Processor::from_annex_b(&input).expect("failed to parse");
 
     println!(
         "{} NAL Units ({}) {}",
