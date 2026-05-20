@@ -25,6 +25,7 @@ pub mod mvex;
 pub mod mvhd;
 pub mod nmhd;
 pub mod padb;
+pub mod pssh;
 pub mod saio;
 pub mod saiz;
 pub mod sbgp;
@@ -171,7 +172,7 @@ impl BoxHeader {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FullBoxHeader {
     pub version: u8,
     pub flags: u32,

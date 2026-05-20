@@ -91,6 +91,7 @@ pub enum BoxType {
     Ssix,
     Prft,
     Uuid,
+    Pssh,
     Unknown([u8; 4]),
 }
 
@@ -188,6 +189,7 @@ impl From<[u8; 4]> for BoxType {
             b"ssix" => BoxType::Ssix,
             b"prft" => BoxType::Prft,
             b"uuid" => BoxType::Uuid,
+            b"pssh" => BoxType::Pssh,
             _ => BoxType::Unknown(value),
         }
     }
@@ -287,6 +289,7 @@ impl From<&BoxType> for [u8; 4] {
             BoxType::Ssix => *b"ssix",
             BoxType::Prft => *b"prft",
             BoxType::Uuid => *b"uuid",
+            BoxType::Pssh => *b"pssh",
             BoxType::Unknown(v) => *v,
         }
     }
