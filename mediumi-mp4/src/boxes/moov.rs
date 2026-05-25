@@ -1,6 +1,7 @@
 use crate::{
     boxes::{
-        BaseBox, BoxIter, Error, Mp4Box, meta::Meta, mvex::Mvex, mvhd::Mvhd, trak::Trak, udta::Udta,
+        BaseBox, BoxIter, Error, Mp4Box, meta::Meta, mvex::Mvex, mvhd::Mvhd, pssh::Pssh,
+        trak::Trak, udta::Udta,
     },
     types::BoxType,
     util::bitstream::BitstreamWriter,
@@ -13,6 +14,7 @@ pub struct Moov {
     pub mvex: Option<Mvex>,
     pub meta: Option<Meta>,
     pub udta: Option<Udta>,
+    pub pssh: Vec<Pssh>,
     pub others: Vec<Vec<u8>>,
 }
 
@@ -33,6 +35,9 @@ impl BaseBox for Moov {
         if let Some(ref u) = self.udta {
             u.write_box(writer);
         }
+        for p in &self.pssh {
+            p.write_box(writer);
+        }
         for raw in &self.others {
             for &b in raw {
                 writer.write_bits(b as u32, 8);
@@ -46,6 +51,7 @@ impl BaseBox for Moov {
         let mut mvex: Option<Mvex> = None;
         let mut meta: Option<Meta> = None;
         let mut udta: Option<Udta> = None;
+        let mut pssh: Vec<Pssh> = Vec::new();
         let mut others: Vec<Vec<u8>> = Vec::new();
 
         for item in BoxIter::new(data) {
@@ -76,6 +82,7 @@ impl BaseBox for Moov {
                     }
                     udta = Some(u);
                 }
+                Mp4Box::Pssh(p) => pssh.push(p),
                 _ => others.push(raw.to_vec()),
             }
         }
@@ -86,6 +93,7 @@ impl BaseBox for Moov {
             mvex,
             meta,
             udta,
+            pssh,
             others,
         })
     }
@@ -121,6 +129,7 @@ mod tests {
             mvex: None,
             meta: None,
             udta: None,
+            pssh: Vec::new(),
             others: Vec::new(),
         };
         let mut w = BitstreamWriter::new();
@@ -128,6 +137,39 @@ mod tests {
         let bytes = w.finish();
         let parsed = Moov::parse(&bytes).expect("parse moov");
         assert_eq!(parsed.mvhd.timescale, 1000);
+        let mut w2 = BitstreamWriter::new();
+        parsed.to_bytes(&mut w2);
+        assert_eq!(w2.finish(), bytes);
+    }
+
+    #[test]
+    fn test_moov_with_pssh_roundtrip() {
+        let pssh = Pssh {
+            header: FullBoxHeader {
+                version: 0,
+                flags: 0,
+            },
+            system_id: [
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
+                0x0E, 0x0F,
+            ],
+            key_ids: Vec::new(),
+            data: vec![0xDE, 0xAD, 0xBE, 0xEF],
+        };
+        let moov = Moov {
+            mvhd: sample_mvhd(),
+            traks: Vec::new(),
+            mvex: None,
+            meta: None,
+            udta: None,
+            pssh: vec![pssh],
+            others: Vec::new(),
+        };
+        let mut w = BitstreamWriter::new();
+        moov.to_bytes(&mut w);
+        let bytes = w.finish();
+
+        let parsed = Moov::parse(&bytes).expect("parse moov with pssh");
         let mut w2 = BitstreamWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);

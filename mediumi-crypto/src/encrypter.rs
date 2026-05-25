@@ -24,11 +24,16 @@ impl Encrypter {
         }
     }
 
-    pub fn enc_initial(&self, moov: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn enc_initial(&self, _moov: &[u8]) -> Result<Vec<u8>, Error> {
         todo!()
     }
 
-    pub fn enc_media(&self, moov: &[u8], moof: &[u8], mdat: &mut [u8]) -> Result<Vec<u8>, Error> {
+    pub fn enc_media(
+        &self,
+        _moov: &[u8],
+        _moof: &[u8],
+        _mdat: &mut [u8],
+    ) -> Result<Vec<u8>, Error> {
         todo!()
     }
 }

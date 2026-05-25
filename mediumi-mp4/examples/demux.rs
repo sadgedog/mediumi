@@ -473,6 +473,16 @@ fn run(label: &str, path: &str) {
                     m.others.len()
                 );
             }
+            Mp4Box::Pssh(p) => {
+                println!(
+                    "[{}] type: 'pssh', version: {}, system_id: {:02x?}, key_ids: {}, data: {} bytes",
+                    i,
+                    p.header.version,
+                    p.system_id,
+                    p.key_ids.len(),
+                    p.data.len()
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),

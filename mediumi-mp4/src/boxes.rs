@@ -61,11 +61,11 @@ use crate::{
         co64::Co64, cslg::Cslg, ctts::Ctts, dinf::Dinf, dref::Dref, edts::Edts, elng::Elng,
         elst::Elst, error::Error, ftyp::Ftyp, hdlr::Hdlr, hmhd::Hmhd, leva::Leva, mdat::Mdat,
         mdhd::Mdhd, mdia::Mdia, mehd::Mehd, meta::Meta, mfhd::Mfhd, minf::Minf, moof::Moof,
-        moov::Moov, mvex::Mvex, mvhd::Mvhd, nmhd::Nmhd, padb::Padb, saio::Saio, saiz::Saiz,
-        sbgp::Sbgp, sdtp::Sdtp, sgpd::Sgpd, smhd::Smhd, stbl::Stbl, stco::Stco, stdp::Stdp,
-        sthd::Sthd, stsc::Stsc, stsd::Stsd, stsh::Stsh, stss::Stss, stsz::Stsz, stts::Stts,
-        stz2::Stz2, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, tkhd::Tkhd, traf::Traf, trak::Trak,
-        tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
+        moov::Moov, mvex::Mvex, mvhd::Mvhd, nmhd::Nmhd, padb::Padb, pssh::Pssh, saio::Saio,
+        saiz::Saiz, sbgp::Sbgp, sdtp::Sdtp, sgpd::Sgpd, smhd::Smhd, stbl::Stbl, stco::Stco,
+        stdp::Stdp, sthd::Sthd, stsc::Stsc, stsd::Stsd, stsh::Stsh, stss::Stss, stsz::Stsz,
+        stts::Stts, stz2::Stz2, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, tkhd::Tkhd, traf::Traf,
+        trak::Trak, tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -286,6 +286,7 @@ pub enum Mp4Box {
     Smhd(Smhd),
     Hmhd(Hmhd),
     Sthd(Sthd),
+    Pssh(Pssh),
     Unknown(UnknownBox),
 }
 
@@ -347,6 +348,7 @@ impl Mp4Box {
             Mp4Box::Smhd(b) => b.write_box(&mut writer),
             Mp4Box::Hmhd(b) => b.write_box(&mut writer),
             Mp4Box::Sthd(b) => b.write_box(&mut writer),
+            Mp4Box::Pssh(b) => b.write_box(&mut writer),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
                 for &byte in &u.payload {
@@ -425,6 +427,7 @@ impl Mp4Box {
             BoxType::Smhd => Mp4Box::Smhd(Smhd::parse(body)?),
             BoxType::Hmhd => Mp4Box::Hmhd(Hmhd::parse(body)?),
             BoxType::Sthd => Mp4Box::Sthd(Sthd::parse(body)?),
+            BoxType::Pssh => Mp4Box::Pssh(Pssh::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),
                 payload: body.to_vec(),
