@@ -8,6 +8,7 @@ pub mod edts;
 pub mod elng;
 pub mod elst;
 pub mod error;
+pub mod frma;
 pub mod ftyp;
 pub mod hdlr;
 pub mod hmhd;
@@ -29,8 +30,12 @@ pub mod pssh;
 pub mod saio;
 pub mod saiz;
 pub mod sbgp;
+pub mod schi;
+pub mod schm;
 pub mod sdtp;
+pub mod senc;
 pub mod sgpd;
+pub mod sinf;
 pub mod smhd;
 pub mod stbl;
 pub mod stco;
@@ -44,6 +49,7 @@ pub mod stsz;
 pub mod stts;
 pub mod stz2;
 pub mod subs;
+pub mod tenc;
 pub mod tfdt;
 pub mod tfhd;
 pub mod tkhd;
@@ -59,13 +65,14 @@ pub mod vmhd;
 use crate::{
     boxes::{
         co64::Co64, cslg::Cslg, ctts::Ctts, dinf::Dinf, dref::Dref, edts::Edts, elng::Elng,
-        elst::Elst, error::Error, ftyp::Ftyp, hdlr::Hdlr, hmhd::Hmhd, leva::Leva, mdat::Mdat,
-        mdhd::Mdhd, mdia::Mdia, mehd::Mehd, meta::Meta, mfhd::Mfhd, minf::Minf, moof::Moof,
-        moov::Moov, mvex::Mvex, mvhd::Mvhd, nmhd::Nmhd, padb::Padb, pssh::Pssh, saio::Saio,
-        saiz::Saiz, sbgp::Sbgp, sdtp::Sdtp, sgpd::Sgpd, smhd::Smhd, stbl::Stbl, stco::Stco,
-        stdp::Stdp, sthd::Sthd, stsc::Stsc, stsd::Stsd, stsh::Stsh, stss::Stss, stsz::Stsz,
-        stts::Stts, stz2::Stz2, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, tkhd::Tkhd, traf::Traf,
-        trak::Trak, tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
+        elst::Elst, error::Error, frma::Frma, ftyp::Ftyp, hdlr::Hdlr, hmhd::Hmhd, leva::Leva,
+        mdat::Mdat, mdhd::Mdhd, mdia::Mdia, mehd::Mehd, meta::Meta, mfhd::Mfhd, minf::Minf,
+        moof::Moof, moov::Moov, mvex::Mvex, mvhd::Mvhd, nmhd::Nmhd, padb::Padb, pssh::Pssh,
+        saio::Saio, saiz::Saiz, sbgp::Sbgp, schi::Schi, schm::Schm, sdtp::Sdtp, senc::Senc,
+        sgpd::Sgpd, sinf::Sinf, smhd::Smhd, stbl::Stbl, stco::Stco, stdp::Stdp, sthd::Sthd,
+        stsc::Stsc, stsd::Stsd, stsh::Stsh, stss::Stss, stsz::Stsz, stts::Stts, stz2::Stz2,
+        subs::Subs, tenc::Tenc, tfdt::Tfdt, tfhd::Tfhd, tkhd::Tkhd, traf::Traf, trak::Trak,
+        tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
     },
     types::BoxType,
     util::bitstream::{BitstreamReader, BitstreamWriter},
@@ -287,6 +294,12 @@ pub enum Mp4Box {
     Hmhd(Hmhd),
     Sthd(Sthd),
     Pssh(Pssh),
+    Sinf(Sinf),
+    Frma(Frma),
+    Schm(Schm),
+    Schi(Schi),
+    Tenc(Tenc),
+    Senc(Senc),
     Unknown(UnknownBox),
 }
 
@@ -349,6 +362,12 @@ impl Mp4Box {
             Mp4Box::Hmhd(b) => b.write_box(&mut writer),
             Mp4Box::Sthd(b) => b.write_box(&mut writer),
             Mp4Box::Pssh(b) => b.write_box(&mut writer),
+            Mp4Box::Sinf(b) => b.write_box(&mut writer),
+            Mp4Box::Frma(b) => b.write_box(&mut writer),
+            Mp4Box::Schm(b) => b.write_box(&mut writer),
+            Mp4Box::Schi(b) => b.write_box(&mut writer),
+            Mp4Box::Tenc(b) => b.write_box(&mut writer),
+            Mp4Box::Senc(b) => b.write_box(&mut writer),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
                 for &byte in &u.payload {
@@ -428,6 +447,12 @@ impl Mp4Box {
             BoxType::Hmhd => Mp4Box::Hmhd(Hmhd::parse(body)?),
             BoxType::Sthd => Mp4Box::Sthd(Sthd::parse(body)?),
             BoxType::Pssh => Mp4Box::Pssh(Pssh::parse(body)?),
+            BoxType::Sinf => Mp4Box::Sinf(Sinf::parse(body)?),
+            BoxType::Frma => Mp4Box::Frma(Frma::parse(body)?),
+            BoxType::Schm => Mp4Box::Schm(Schm::parse(body)?),
+            BoxType::Schi => Mp4Box::Schi(Schi::parse(body)?),
+            BoxType::Tenc => Mp4Box::Tenc(Tenc::parse(body)?),
+            BoxType::Senc => Mp4Box::Senc(Senc::parse(body)?),
             _ => Mp4Box::Unknown(UnknownBox {
                 header: header.clone(),
                 payload: body.to_vec(),

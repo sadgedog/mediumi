@@ -100,6 +100,7 @@ mod tests {
                 sbgps: Vec::new(),
                 sgpds: Vec::new(),
                 subs: Vec::new(),
+                sencs: Vec::new(),
                 saizs: Vec::new(),
                 saios: Vec::new(),
                 meta: None,

@@ -153,7 +153,8 @@ impl SampleEntry {
         let data_reference_index = reader.read_bits(16)? as u16;
 
         match &box_type {
-            b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp08" | b"vp09" | b"mp4v" => {
+            b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp08" | b"vp09" | b"mp4v"
+            | b"encv" => {
                 let visual = VisualSampleEntry::parse(&mut reader)?;
                 let nested = parse_nested_boxes(&mut reader)?;
                 Ok(Self {
@@ -163,7 +164,7 @@ impl SampleEntry {
                     nested,
                 })
             }
-            b"mp4a" | b"ac-3" | b"ec-3" | b"opus" | b"alac" | b"flaC" => {
+            b"mp4a" | b"ac-3" | b"ec-3" | b"opus" | b"alac" | b"flaC" | b"enca" => {
                 let audio = AudioSampleEntry::parse(&mut reader)?;
                 let nested = parse_nested_boxes(&mut reader)?;
                 Ok(Self {
@@ -445,6 +446,195 @@ mod tests {
         assert_eq!(entry.nested.len(), 1);
         assert_eq!(&entry.nested[0].box_type, b"esds");
 
+        let mut w = BitstreamWriter::new();
+        parsed.to_bytes(&mut w);
+        assert_eq!(w.finish(), stsd_body);
+    }
+
+    #[test]
+    fn encv_entry_with_sinf_roundtrip() {
+        use crate::boxes::frma::Frma;
+        use crate::boxes::schi::Schi;
+        use crate::boxes::schm::Schm;
+        use crate::boxes::sinf::Sinf;
+        use crate::boxes::tenc::Tenc;
+
+        // Build a typed sinf and serialize it to a full box (size + 'sinf' + body).
+        let sinf = Sinf {
+            frma: Frma {
+                data_format: *b"avc1",
+            },
+            schm: Schm {
+                header: FullBoxHeader {
+                    version: 0,
+                    flags: 0,
+                },
+                scheme_type: *b"cenc",
+                scheme_version: 0x0001_0000,
+                scheme_uri: None,
+            },
+            schi: Some(Schi {
+                tenc: Some(Tenc {
+                    header: FullBoxHeader {
+                        version: 0,
+                        flags: 0,
+                    },
+                    default_crypt_byte_block: 0,
+                    default_skip_byte_block: 0,
+                    default_is_protected: 1,
+                    default_per_sample_iv_size: 8,
+                    default_kid: [0x42; 16],
+                    default_constant_iv: None,
+                }),
+                others: Vec::new(),
+            }),
+            others: Vec::new(),
+        };
+        let mut sinf_w = BitstreamWriter::new();
+        sinf.write_box(&mut sinf_w);
+        let sinf_box = sinf_w.finish();
+
+        // encv body = VisualSampleEntry header + nested avcC + nested sinf.
+        let mut visual = Vec::new();
+        visual.extend_from_slice(&[0u8; 6]); // SampleEntry reserved
+        visual.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
+        visual.extend_from_slice(&0u16.to_be_bytes()); // pre_defined1
+        visual.extend_from_slice(&0u16.to_be_bytes()); // reserved
+        for _ in 0..3 {
+            visual.extend_from_slice(&0u32.to_be_bytes());
+        }
+        visual.extend_from_slice(&1920u16.to_be_bytes()); // width
+        visual.extend_from_slice(&1080u16.to_be_bytes()); // height
+        visual.extend_from_slice(&0x00480000u32.to_be_bytes());
+        visual.extend_from_slice(&0x00480000u32.to_be_bytes());
+        visual.extend_from_slice(&0u32.to_be_bytes());
+        visual.extend_from_slice(&1u16.to_be_bytes()); // frame_count
+        visual.push(0u8); // compressorname length = 0
+        visual.extend(std::iter::repeat_n(0u8, 31));
+        visual.extend_from_slice(&0x0018u16.to_be_bytes()); // depth
+        visual.extend_from_slice(&(-1i16).to_be_bytes()); // pre_defined2
+        // nested avcC
+        visual.extend_from_slice(&12u32.to_be_bytes());
+        visual.extend_from_slice(b"avcC");
+        visual.extend_from_slice(&[0x01, 0x42, 0xC0, 0x1E]);
+        // nested sinf
+        visual.extend_from_slice(&sinf_box);
+
+        let entry_bytes = box_bytes(b"encv", &visual);
+        let stsd_body = build_stsd_body(std::slice::from_ref(&entry_bytes));
+        let parsed = Stsd::parse(&stsd_body).expect("parse");
+
+        let entry = &parsed.entries[0];
+        assert_eq!(&entry.box_type, b"encv");
+        // encv body is parsed as a visual sample entry
+        match &entry.kind {
+            SampleEntryKind::Visual(v) => {
+                assert_eq!(v.width, 1920);
+                assert_eq!(v.height, 1080);
+            }
+            _ => panic!("expected Visual"),
+        }
+        // nested: avcC + sinf (both kept as raw NestedBox)
+        assert_eq!(entry.nested.len(), 2);
+        assert_eq!(&entry.nested[0].box_type, b"avcC");
+        assert_eq!(&entry.nested[1].box_type, b"sinf");
+
+        // the nested sinf body parses back to the typed Sinf (avcC-style explicit parse)
+        let parsed_sinf = Sinf::parse(&entry.nested[1].body).expect("parse nested sinf");
+        assert_eq!(parsed_sinf, sinf);
+
+        // stsd byte-exact roundtrip
+        let mut w = BitstreamWriter::new();
+        parsed.to_bytes(&mut w);
+        assert_eq!(w.finish(), stsd_body);
+    }
+
+    #[test]
+    fn enca_entry_with_sinf_roundtrip() {
+        use crate::boxes::frma::Frma;
+        use crate::boxes::schi::Schi;
+        use crate::boxes::schm::Schm;
+        use crate::boxes::sinf::Sinf;
+        use crate::boxes::tenc::Tenc;
+
+        // Build a typed sinf (frma = original mp4a) and serialize to a full box.
+        let sinf = Sinf {
+            frma: Frma {
+                data_format: *b"mp4a",
+            },
+            schm: Schm {
+                header: FullBoxHeader {
+                    version: 0,
+                    flags: 0,
+                },
+                scheme_type: *b"cenc",
+                scheme_version: 0x0001_0000,
+                scheme_uri: None,
+            },
+            schi: Some(Schi {
+                tenc: Some(Tenc {
+                    header: FullBoxHeader {
+                        version: 0,
+                        flags: 0,
+                    },
+                    default_crypt_byte_block: 0,
+                    default_skip_byte_block: 0,
+                    default_is_protected: 1,
+                    default_per_sample_iv_size: 8,
+                    default_kid: [0x42; 16],
+                    default_constant_iv: None,
+                }),
+                others: Vec::new(),
+            }),
+            others: Vec::new(),
+        };
+        let mut sinf_w = BitstreamWriter::new();
+        sinf.write_box(&mut sinf_w);
+        let sinf_box = sinf_w.finish();
+
+        // enca body = AudioSampleEntry header + nested esds + nested sinf.
+        let mut audio = Vec::new();
+        audio.extend_from_slice(&[0u8; 6]); // SampleEntry reserved
+        audio.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
+        for _ in 0..2 {
+            audio.extend_from_slice(&0u32.to_be_bytes()); // reserved[2]
+        }
+        audio.extend_from_slice(&2u16.to_be_bytes()); // channelcount
+        audio.extend_from_slice(&16u16.to_be_bytes()); // samplesize
+        audio.extend_from_slice(&0u16.to_be_bytes()); // pre_defined
+        audio.extend_from_slice(&0u16.to_be_bytes()); // reserved
+        audio.extend_from_slice(&((48000u32) << 16).to_be_bytes()); // samplerate
+        // nested esds
+        audio.extend_from_slice(&10u32.to_be_bytes());
+        audio.extend_from_slice(b"esds");
+        audio.extend_from_slice(&[0x42, 0x00]);
+        // nested sinf
+        audio.extend_from_slice(&sinf_box);
+
+        let entry_bytes = box_bytes(b"enca", &audio);
+        let stsd_body = build_stsd_body(std::slice::from_ref(&entry_bytes));
+        let parsed = Stsd::parse(&stsd_body).expect("parse");
+
+        let entry = &parsed.entries[0];
+        assert_eq!(&entry.box_type, b"enca");
+        // enca body is parsed as an audio sample entry
+        match &entry.kind {
+            SampleEntryKind::Audio(a) => {
+                assert_eq!(a.channelcount, 2);
+                assert_eq!(a.samplerate, 48000u32 << 16);
+            }
+            _ => panic!("expected Audio"),
+        }
+        // nested: esds + sinf
+        assert_eq!(entry.nested.len(), 2);
+        assert_eq!(&entry.nested[0].box_type, b"esds");
+        assert_eq!(&entry.nested[1].box_type, b"sinf");
+
+        // the nested sinf body parses back to the typed Sinf
+        let parsed_sinf = Sinf::parse(&entry.nested[1].body).expect("parse nested sinf");
+        assert_eq!(parsed_sinf, sinf);
+
+        // stsd byte-exact roundtrip
         let mut w = BitstreamWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);

@@ -57,6 +57,18 @@ This project is under active development. APIs may change without notice.
 - [ ] AAC (esds / mp4a, ISO/IEC 14496-14) — not yet supported
 - [ ] AC-3 (dac3, ETSI TS 102 366 Annex F) — not yet supported
 
+### Common Encryption support (CENC, ISO/IEC 23001-7)
+Box-level support for `cenc` / `cbcs` protected content. Spec refs are
+ISO/IEC 23001-7 unless noted as 14496-12.
+- [x] pssh (8.1) — moov / moof
+- [x] sinf (8.12.1) — protected sample entry container, not yet
+    - [x] frma (8.12.2)
+    - [x] schm (8.12.5)
+    - [x] schi (8.12.6)
+        - [x] tenc (8.2) — version 0 (cenc) + version 1 (cbcs)
+- [x] senc (7.2) — traf, not yet
+- [x] encv / enca sample entry recognition (stsd) — not yet
+
 - [x] ftyp (4.3) *
 - [x] mdat (8.1.1) *
 - [x] moov (8.2.1) *
@@ -107,7 +119,6 @@ This project is under active development. APIs may change without notice.
         - [x] trex (8.8.3) *
         - [x] leva (8.8.13)
     - [x] udta (8.10.1)
-    - [x] pssh
 - [x] moof (8.8.4)
     - [x] mfhd (8.8.5)
     - [x] meta (8.11.1)
@@ -122,4 +133,3 @@ This project is under active development. APIs may change without notice.
         - [x] saio (8.7.9)
         - [x] tfdt (8.8.12)
         - [x] meta (8.11.1)
-    - [ ] pssh (rare case(key rotation only))
