@@ -1,17 +1,38 @@
 use crate::error::Error;
+use crate::pssh::PsshInput;
+use crate::{initial, media, segment};
 
-#[derive(Debug)]
+/// Encryption mode (Cenc, Cbcs)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Cenc,
     Cbcs,
 }
 
+/// Encrypter
+///
+/// Construct **one per asset+track** and reuse it across `enc_initial` (the
+/// init segment) and every `enc_media` call (each fragment). The per-sample IV
+/// counter (`next_sample_index`) is owned by the struct and must increase
+/// monotonically across the whole track — constructing a fresh `Encrypter` per
+/// fragment would reset it and cause catastrophic IV reuse (AES-CTR
+/// many-time-pad). The field is `pub` so callers can persist / restore it for
+/// distributed or restartable packaging.
 #[derive(Debug)]
 pub struct Encrypter {
     pub mode: Mode,
+    /// `tenc.default_KID`
     pub key_id: [u8; 16],
+    /// AES-128 content key
     pub key: [u8; 16],
+    /// Base IV. Upper 8 bytes are kept per-track; lower 8 bytes are overwritten
+    /// by the per-sample counter inside `derive_per_sample_iv`.
     pub iv: [u8; 16],
+    /// Pssh inputs to attach to the moov during `enc_initial`.
+    pub pssh_inputs: Vec<PsshInput>,
+    /// Per-sample IV counter, advanced by `enc_media`. Reuse the same
+    /// `Encrypter` across fragments to keep IVs unique.
+    pub next_sample_index: u64,
 }
 
 impl Encrypter {
@@ -21,19 +42,67 @@ impl Encrypter {
             key_id,
             key,
             iv,
+            pssh_inputs: Vec::new(),
+            next_sample_index: 0,
         }
     }
 
-    pub fn enc_initial(&self, _moov: &[u8]) -> Result<Vec<u8>, Error> {
-        todo!()
+    /// Append a DRM-system pssh entry
+    pub fn add_pssh(&mut self, input: PsshInput) {
+        self.pssh_inputs.push(input);
     }
 
+    /// Encrypt an init segment
+    /// need splitted moov box byte streams
+    pub fn enc_init(&self, moov: &[u8]) -> Result<Vec<u8>, Error> {
+        initial::enc_init(self, moov)
+    }
+
+    /// Encrypt an init segment
+    /// need splitted moov, moof, mdat box byte streams
     pub fn enc_media(
-        &self,
-        _moov: &[u8],
-        _moof: &[u8],
-        _mdat: &mut [u8],
+        &mut self,
+        moov: &[u8],
+        moof: &[u8],
+        mdat: &mut [u8],
     ) -> Result<Vec<u8>, Error> {
-        todo!()
+        media::enc_media(self, moov, moof, mdat)
+    }
+
+    /// Encrypt an init segment
+    pub fn enc_init_segment<W: std::io::Write>(
+        &self,
+        init_bytes: &[u8],
+        out: &mut W,
+    ) -> Result<(), Error> {
+        segment::enc_init_segment(self, init_bytes, out)
+    }
+
+    /// Encrypt an init segment (return Vec<u8>)
+    pub fn enc_init_segment_to_vec(&self, init_bytes: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut buf = Vec::new();
+        self.enc_init_segment(init_bytes, &mut buf)?;
+        Ok(buf)
+    }
+
+    /// Encrypt a segment
+    pub fn enc_media_segment<W: std::io::Write>(
+        &mut self,
+        init_bytes: &[u8],
+        media_bytes: &mut [u8],
+        out: &mut W,
+    ) -> Result<(), Error> {
+        segment::enc_media_segment(self, init_bytes, media_bytes, out)
+    }
+
+    /// Encrypt a segment (return Vec<u8>)
+    pub fn enc_media_segment_to_vec(
+        &mut self,
+        init_bytes: &[u8],
+        media_bytes: &mut [u8],
+    ) -> Result<Vec<u8>, Error> {
+        let mut buf = Vec::with_capacity(media_bytes.len());
+        self.enc_media_segment(init_bytes, media_bytes, &mut buf)?;
+        Ok(buf)
     }
 }

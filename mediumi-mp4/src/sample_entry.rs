@@ -38,14 +38,14 @@ fn find_in_entry<'a>(entry: &'a SampleEntry, target: &[u8; 4]) -> Option<&'a [u8
 ///                     └── sinf (created by caller)
 /// ```
 pub fn wrap_with_sinf(entry: &mut SampleEntry, sinf: &Sinf) -> Option<[u8; 4]> {
-    let new_4cc: [u8; 4] = match &entry.box_type {
+    let box_type: [u8; 4] = match &entry.box_type {
         b"avc1" | b"avc3" | b"hev1" | b"hvc1" | b"av01" | b"vp08" | b"vp09" | b"mp4v" => *b"encv",
         b"mp4a" | b"ac-3" | b"ec-3" | b"opus" | b"alac" | b"flaC" => *b"enca",
         _ => return None,
     };
-    entry.box_type = new_4cc;
+    entry.box_type = box_type;
 
-    // BaseBox::to_bytes writes the box BODY only (no size/4cc header).
+    // BaseBox::to_bytes writes the box BODY only (no size/box_type header).
     // The stsd serialiser wraps each NestedBox with its own size+type prefix.
     let mut w = BitstreamWriter::new();
     sinf.to_bytes(&mut w);
@@ -53,7 +53,7 @@ pub fn wrap_with_sinf(entry: &mut SampleEntry, sinf: &Sinf) -> Option<[u8; 4]> {
         box_type: *b"sinf",
         body: w.finish(),
     });
-    Some(new_4cc)
+    Some(box_type)
 }
 
 #[cfg(test)]
@@ -66,10 +66,10 @@ mod tests {
     use crate::boxes::stsd::{AudioSampleEntry, SampleEntryKind, VisualSampleEntry};
     use crate::boxes::tenc::Tenc;
 
-    fn sample_sinf(original_4cc: [u8; 4]) -> Sinf {
+    fn sample_sinf(original_box_type: [u8; 4]) -> Sinf {
         Sinf {
             frma: Frma {
-                data_format: original_4cc,
+                data_format: original_box_type,
             },
             schm: Schm {
                 header: FullBoxHeader {

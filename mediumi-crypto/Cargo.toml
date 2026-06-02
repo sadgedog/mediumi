@@ -12,7 +12,14 @@ keywords = ["multimedia", "cryptography"]
 categories = ["multimedia", "cryptography"]
 
 [dependencies]
+mediumi-mp4 = { path = "../mediumi-mp4" }
 aes = "0.9"
 ctr = "0.10"
 cbc = "0.2"
-mediumi-mp4 = { path = "../mediumi-mp4" }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "cenc"
+harness = false

@@ -22,7 +22,7 @@ impl BaseBox for Trgr {
 
     fn to_bytes(&self, writer: &mut BitstreamWriter) {
         for g in &self.groups {
-            // size(4) + 4cc(4) + version+flags(4) + track_group_id(4) + remaining
+            // size(4) + box_type(4) + version+flags(4) + track_group_id(4) + remaining
             let total = 16u32 + g.remaining.len() as u32;
             writer.write_bits(total, 32);
             for &b in &g.track_group_type {

@@ -4,7 +4,7 @@ use crate::{
     util::bitstream::{BitstreamReader, BitstreamWriter},
 };
 
-/// Records the codingname (4cc) of the unprotected sample entry that the
+/// Records the codingname (box_type) of the unprotected sample entry that the
 /// enclosing `encv` / `enca` is shadowing (e.g. `b"avc1"` / `b"mp4a"`).
 #[derive(Debug, PartialEq)]
 pub struct Frma {
