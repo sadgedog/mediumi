@@ -9,7 +9,9 @@ use mediumi_mp4::boxes::{
     senc::{SENC_FLAG_USE_SUBSAMPLES, Senc, SencEntry, SubsampleEntry},
     traf::Traf,
 };
-use mediumi_mp4::{Mp4Box, demuxer, find_codec_config, iter_traks};
+use mediumi_mp4::{
+    BoxHeader, BoxSize, Mp4Box, demuxer, find_codec_config, iter_traks, types::BoxType,
+};
 use std::collections::HashMap;
 
 /// `aux_info_type = 'cenc'` (big-endian box_type as u32).
@@ -260,19 +262,46 @@ fn senc_entry_size(entry: &SencEntry) -> usize {
     size
 }
 
-/// Linear scan for `senc` box starts (offset of the size field, i.e. 4 bytes
-/// before the box_type). The moof's other boxes do not contain literal `senc` bytes
-/// in their bodies, so this is safe in practice for the small moof header.
+/// Find each `senc` box's start offset by walking the serialized moof's box tree
+/// moof → traf → senc
 fn scan_senc_box_offsets(buf: &[u8]) -> Vec<usize> {
     let mut out = Vec::new();
-    let mut i = 4;
-    while i + 4 <= buf.len() {
-        if &buf[i..i + 4] == b"senc" {
-            out.push(i - 4);
+    let Ok(moof_hdr) = BoxHeader::parse(buf) else {
+        return out;
+    };
+    // moof's children → find each traf.
+    let mut offset = moof_hdr.header_size;
+    while let Some((header, total)) = next_box(buf, offset, buf.len()) {
+        if header.box_type == BoxType::Traf {
+            // this traf's children → find its senc.
+            let traf_end = offset + total;
+            let mut inner = offset + header.header_size;
+            while let Some((ih, itotal)) = next_box(buf, inner, traf_end) {
+                if ih.box_type == BoxType::Senc {
+                    out.push(inner);
+                }
+                inner += itotal;
+            }
         }
-        i += 1;
+        offset += total;
     }
     out
+}
+
+fn next_box(buf: &[u8], offset: usize, end: usize) -> Option<(BoxHeader, usize)> {
+    if offset + 8 > end {
+        return None;
+    }
+    let header = BoxHeader::parse(&buf[offset..end]).ok()?;
+    let total = match header.box_size {
+        BoxSize::Normal(s) => s as usize,
+        BoxSize::Large(s) => s as usize,
+        BoxSize::ExtendsToEnd => end - offset,
+    };
+    if total < header.header_size || offset + total > end {
+        return None;
+    }
+    Some((header, total))
 }
 
 #[cfg(test)]
