@@ -16,6 +16,9 @@ pub enum Error {
     ZeroLengthNal,
     /// avcC `length_size_minus_one + 1` was not 1, 2, or 4.
     InvalidLengthSize(u8),
+    /// A VCL NAL's slice header could not be parsed (SPS/PPS missing or
+    /// unparsable, or a malformed slice header).
+    SliceHeaderParseFailed,
 
     // --- container ---
     /// Underlying `mediumi-mp4` parse / serialize error.
@@ -70,6 +73,12 @@ impl fmt::Display for Error {
             Error::ZeroLengthNal => write!(f, "encountered a zero-length NAL unit"),
             Error::InvalidLengthSize(v) => {
                 write!(f, "invalid avcC length size {v} (expected 1, 2, or 4)")
+            }
+            Error::SliceHeaderParseFailed => {
+                write!(
+                    f,
+                    "failed to parse a VCL NAL slice header (need valid SPS/PPS)"
+                )
             }
             Error::Mp4(e) => write!(f, "mp4: {e}"),
             Error::NoMoov => write!(f, "moov box not found"),

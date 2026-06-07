@@ -3,6 +3,7 @@ use crate::cenc::{Subsample, apply_cenc_subsamples, derive_per_sample_iv, encryp
 use crate::encrypter::{Encrypter, Iv, Mode};
 use crate::error::Error;
 use crate::subsample::{self, CodecKind};
+use mediumi_h264::{nal::NalUnit, pps::Pps, sps::Sps};
 use mediumi_mp4::boxes::{
     FullBoxHeader,
     saio::Saio,
@@ -14,9 +15,6 @@ use mediumi_mp4::{
     BoxHeader, BoxSize, Mp4Box, demuxer, find_codec_config, iter_traks, types::BoxType,
 };
 use std::collections::HashMap;
-
-/// `saiz` / `saio` flag: aux_info_type / parameter fields are present.
-const AUX_INFO_TYPE_PRESENT: u32 = 0x01;
 
 pub(crate) fn enc_media(
     enc: &mut Encrypter,
@@ -45,7 +43,7 @@ pub(crate) fn enc_media(
             return Err(Error::NoMoof);
         };
         for (traf_idx, traf) in moof.trafs.iter_mut().enumerate() {
-            let Some(&codec) = tracks.get(&traf.tfhd.track_id) else {
+            let Some(codec) = tracks.get(&traf.tfhd.track_id) else {
                 continue;
             };
             let ranges = sample_ranges(traf, mdat_payload_pos)?;
@@ -120,7 +118,6 @@ pub(crate) fn enc_media(
                 continue; // cbcs audio: encrypted, no auxiliary boxes
             }
 
-            let aux_info_type = u32::from_be_bytes(enc.mode.scheme_fourcc());
             let sample_count = senc_entries.len() as u32;
             let flags = if use_subsamples {
                 SENC_FLAG_USE_SUBSAMPLES
@@ -134,10 +131,10 @@ pub(crate) fn enc_media(
             traf.saizs.push(Saiz {
                 header: FullBoxHeader {
                     version: 0,
-                    flags: AUX_INFO_TYPE_PRESENT,
+                    flags: 0,
                 },
-                aux_info_type: Some(aux_info_type),
-                aux_info_type_parameter: Some(0),
+                aux_info_type: None,
+                aux_info_type_parameter: None,
                 default_sample_info_size: 0,
                 sample_count,
                 sample_info_sizes: saiz_sizes,
@@ -145,10 +142,10 @@ pub(crate) fn enc_media(
             traf.saios.push(Saio {
                 header: FullBoxHeader {
                     version: 0,
-                    flags: AUX_INFO_TYPE_PRESENT,
+                    flags: 0,
                 },
-                aux_info_type: Some(aux_info_type),
-                aux_info_type_parameter: Some(0),
+                aux_info_type: None,
+                aux_info_type_parameter: None,
                 entry_count: 1,
                 offset: vec![0], // placeholder, patched below
             });
@@ -214,8 +211,11 @@ fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, CodecKind>, E
                 if cfg.len() < 5 {
                     return Err(Error::MissingAvcc);
                 }
+                let (sps, pps) = parse_avcc_sps_pps(cfg);
                 CodecKind::Avc {
                     length_size: (cfg[4] & 0b0000_0011) + 1,
+                    sps,
+                    pps,
                 }
             }
             b"mp4a" | b"enca" => CodecKind::Mp4a,
@@ -224,6 +224,49 @@ fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, CodecKind>, E
         tracks.insert(trak.tkhd.track_id, codec);
     }
     Ok(tracks)
+}
+
+/// Extract and parse the first SPS and PPS from an `avcC` configuration record.
+fn parse_avcc_sps_pps(avcc: &[u8]) -> (Option<Box<Sps>>, Option<Box<Pps>>) {
+    fn inner(avcc: &[u8]) -> Option<(Box<Sps>, Box<Pps>)> {
+        // avcC: configVer(1) profile(1) compat(1) level(1) lengthSizeM1(1)
+        //       numSPS(1) [len(2) SPS NAL]... numPPS(1) [len(2) PPS NAL]...
+        if avcc.len() < 6 {
+            return None;
+        }
+        let num_sps = avcc[5] & 0x1f;
+        let mut p = 6usize;
+        let mut sps: Option<Sps> = None;
+        for _ in 0..num_sps {
+            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
+            p += 2;
+            let nal = avcc.get(p..p + len)?;
+            p += len;
+            if sps.is_none() && nal.len() > 1 {
+                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
+                sps = Sps::parse(&rbsp).ok();
+            }
+        }
+        let sps = sps?;
+        let num_pps = *avcc.get(p)?;
+        p += 1;
+        let mut pps: Option<Pps> = None;
+        for _ in 0..num_pps {
+            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
+            p += 2;
+            let nal = avcc.get(p..p + len)?;
+            p += len;
+            if pps.is_none() && nal.len() > 1 {
+                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
+                pps = Pps::parse(&rbsp, &sps).ok();
+            }
+        }
+        Some((Box::new(sps), Box::new(pps?)))
+    }
+    match inner(avcc) {
+        Some((sps, pps)) => (Some(sps), Some(pps)),
+        None => (None, None),
+    }
 }
 
 /// Sample byte ranges within the mdat payload, accumulated from trun.
