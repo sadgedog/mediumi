@@ -2,22 +2,73 @@ use crate::error::Error;
 use crate::pssh::PsshInput;
 use crate::{initial, media, segment};
 
-/// Encryption mode (Cenc, Cbcs)
+/// Per-sample IV base (cenc) or constant IV (cbcs). 8 or 16 bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Iv {
+    Bytes8([u8; 8]),
+    Bytes16([u8; 16]),
+}
+
+impl Iv {
+    /// Raw IV bytes as stored in senc / tenc (8 or 16).
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Iv::Bytes8(b) => b,
+            Iv::Bytes16(b) => b,
+        }
+    }
+
+    /// IV size in bytes (8 or 16).
+    pub fn size(&self) -> u8 {
+        match self {
+            Iv::Bytes8(_) => 8,
+            Iv::Bytes16(_) => 16,
+        }
+    }
+
+    /// Zero-extend to a 16-byte block: an 8-byte IV occupies the high 8 bytes,
+    /// the low 8 bytes are zero. Used as the AES-CTR counter base and as the
+    /// cbcs AES-CBC IV (which is always a 16-byte block).
+    pub fn to_block16(&self) -> [u8; 16] {
+        match self {
+            Iv::Bytes8(b) => {
+                let mut out = [0u8; 16];
+                out[0..8].copy_from_slice(b);
+                out
+            }
+            Iv::Bytes16(b) => *b,
+        }
+    }
+}
+
+/// Encryption scheme + its IV. cenc carries a per-sample IV base; cbcs carries
+/// a constant IV. Bundling the IV with the mode makes invalid combinations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    Cenc,
-    Cbcs,
+    /// AES-CTR, per-sample IV (8 or 16 bytes is the base; see `derive_per_sample_iv`).
+    Cenc { iv: Iv },
+    /// AES-CBC + pattern, constant IV (8 or 16 bytes; carried in tenc).
+    Cbcs { iv: Iv },
+}
+
+impl Mode {
+    /// The scheme's IV (per-sample base for cenc, constant for cbcs).
+    pub fn iv(&self) -> &Iv {
+        match self {
+            Mode::Cenc { iv } | Mode::Cbcs { iv } => iv,
+        }
+    }
+
+    /// scheme_type / aux_info_type 4cc.
+    pub fn scheme_fourcc(&self) -> [u8; 4] {
+        match self {
+            Mode::Cenc { .. } => *b"cenc",
+            Mode::Cbcs { .. } => *b"cbcs",
+        }
+    }
 }
 
 /// Encrypter
-///
-/// Construct **one per asset+track** and reuse it across `enc_initial` (the
-/// init segment) and every `enc_media` call (each fragment). The per-sample IV
-/// counter (`next_sample_index`) is owned by the struct and must increase
-/// monotonically across the whole track — constructing a fresh `Encrypter` per
-/// fragment would reset it and cause catastrophic IV reuse (AES-CTR
-/// many-time-pad). The field is `pub` so callers can persist / restore it for
-/// distributed or restartable packaging.
 #[derive(Debug)]
 pub struct Encrypter {
     pub mode: Mode,
@@ -25,25 +76,26 @@ pub struct Encrypter {
     pub key_id: [u8; 16],
     /// AES-128 content key
     pub key: [u8; 16],
-    /// Base IV. Upper 8 bytes are kept per-track; lower 8 bytes are overwritten
-    /// by the per-sample counter inside `derive_per_sample_iv`.
-    pub iv: [u8; 16],
     /// Pssh inputs to attach to the moov during `enc_initial`.
     pub pssh_inputs: Vec<PsshInput>,
-    /// Per-sample IV counter, advanced by `enc_media`. Reuse the same
-    /// `Encrypter` across fragments to keep IVs unique.
+    /// Per-sample IV counter (8-byte cenc): added to the high 8 bytes of the
+    /// IV per sample. Unused by cbcs and by 16-byte cenc.
     pub next_sample_index: u64,
+    /// Cumulative cipher-block offset:
+    /// the next sample's IV = base_iv (128-bit) + this. Advanced by the number
+    /// of encrypted blocks per sample. Unused by 8-byte cenc and cbcs.
+    pub next_block_offset: u128,
 }
 
 impl Encrypter {
-    pub fn new(mode: Mode, key_id: [u8; 16], key: [u8; 16], iv: [u8; 16]) -> Self {
+    pub fn new(mode: Mode, key_id: [u8; 16], key: [u8; 16]) -> Self {
         Self {
             mode,
             key_id,
             key,
-            iv,
             pssh_inputs: Vec::new(),
             next_sample_index: 0,
+            next_block_offset: 0,
         }
     }
 

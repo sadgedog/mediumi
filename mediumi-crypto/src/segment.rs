@@ -52,7 +52,7 @@ pub(crate) fn enc_media_segment<W: Write>(
     out.write_all(&new_moof)?;
     out.write_all(&((parts.mdat.len() + 8) as u32).to_be_bytes())?;
     out.write_all(b"mdat")?;
-    out.write_all(parts.mdat)?; // streamed directly — no copy
+    out.write_all(parts.mdat)?;
     Ok(())
 }
 

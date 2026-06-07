@@ -28,6 +28,7 @@ pub fn plan(sample: &[u8], length_size: u8) -> Result<Vec<Subsample>, Error> {
         }
         let mut nal_len = 0usize;
         for i in 0..ls {
+            // get NAL Unit length from length_size & sample
             nal_len = (nal_len << 8) | sample[offset + i] as usize;
         }
         if nal_len == 0 {

@@ -6,11 +6,14 @@ use mediumi_mp4::boxes::{
 use mediumi_mp4::sample_entry::wrap_with_sinf;
 use mediumi_mp4::{Mp4Box, demuxer, muxer};
 
-/// CMAF `cenc` per-sample IV size (8-byte IV in the high half of the counter).
-const CENC_PER_SAMPLE_IV_SIZE: u8 = 8;
-/// `cbcs` pattern: encrypt 1 of every 10 16-byte blocks
-const CBCS_CRYPT_BYTE_BLOCK: u8 = 1;
-const CBCS_SKIP_BYTE_BLOCK: u8 = 9;
+/// cbcs pattern `(crypt_byte_block, skip_byte_block)` for a sample-entry box_type.
+/// Video=1:9, audio=0:0
+fn cbcs_pattern(box_type: &[u8; 4]) -> (u8, u8) {
+    match box_type {
+        b"avc1" | b"avc3" => (1, 9),
+        _ => (0, 0),
+    }
+}
 
 pub(crate) fn enc_init(enc: &Encrypter, moov_bytes: &[u8]) -> Result<Vec<u8>, Error> {
     let mut boxes = demuxer::demux(moov_bytes)?;
@@ -58,9 +61,9 @@ fn is_encryptable(fourcc: &[u8; 4]) -> bool {
 }
 
 fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
-    let (scheme_type, tenc) = match enc.mode {
-        // cenc: AES-CTR, per-sample IV, no pattern → tenc version 0.
-        Mode::Cenc => (
+    let (scheme_type, tenc) = match &enc.mode {
+        // cenc: AES-CTR, per-sample IV (8 or 16 bytes), no pattern → tenc version 0.
+        Mode::Cenc { iv } => (
             *b"cenc",
             Tenc {
                 header: FullBoxHeader {
@@ -70,29 +73,30 @@ fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
                 default_crypt_byte_block: 0,
                 default_skip_byte_block: 0,
                 default_is_protected: 1,
-                default_per_sample_iv_size: CENC_PER_SAMPLE_IV_SIZE,
+                default_per_sample_iv_size: iv.size(), // 8 or 16
                 default_kid: enc.key_id,
                 default_constant_iv: None,
             },
         ),
-        // cbcs: AES-CBC, constant IV, 1:9 pattern → tenc version 1 (the pattern
-        // nibbles are only emitted for version 1) with per_sample_iv_size = 0
-        // so the constant IV in tenc applies to every sample.
-        Mode::Cbcs => (
-            *b"cbcs",
-            Tenc {
-                header: FullBoxHeader {
-                    version: 1,
-                    flags: 0,
+        // cbcs: AES-CBC, constant IV (8 or 16 bytes), codec-specific pattern → tenc version 1.
+        Mode::Cbcs { iv } => {
+            let (crypt_bb, skip_bb) = cbcs_pattern(&original_box_type);
+            (
+                *b"cbcs",
+                Tenc {
+                    header: FullBoxHeader {
+                        version: 1,
+                        flags: 0,
+                    },
+                    default_crypt_byte_block: crypt_bb,
+                    default_skip_byte_block: skip_bb,
+                    default_is_protected: 1,
+                    default_per_sample_iv_size: 0,
+                    default_kid: enc.key_id,
+                    default_constant_iv: Some(iv.as_bytes().to_vec()), // 8 or 16 bytes
                 },
-                default_crypt_byte_block: CBCS_CRYPT_BYTE_BLOCK,
-                default_skip_byte_block: CBCS_SKIP_BYTE_BLOCK,
-                default_is_protected: 1,
-                default_per_sample_iv_size: 0,
-                default_kid: enc.key_id,
-                default_constant_iv: Some(enc.iv.to_vec()),
-            },
-        ),
+            )
+        }
     };
     Sinf {
         frma: Frma {

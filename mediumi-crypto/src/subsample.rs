@@ -13,6 +13,18 @@ pub enum CodecKind {
     Avc { length_size: u8 },
 }
 
+impl CodecKind {
+    /// cbcs pattern `(crypt_byte_block, skip_byte_block)` in 16-byte blocks.
+    /// Video uses 1:9 (encrypt 1 of every 10 blocks); audio uses 0:0 (no
+    /// pattern — every full block is encrypted).
+    pub fn cbcs_pattern(self) -> (u8, u8) {
+        match self {
+            CodecKind::Avc { .. } => (1, 9),
+            CodecKind::Mp4a => (0, 0),
+        }
+    }
+}
+
 /// Build a subsample plan for one sample.
 ///
 /// An **empty** result means "encrypt the whole sample with no subsamples" (audio).

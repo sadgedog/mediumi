@@ -1,5 +1,6 @@
-use crate::cenc::{Subsample, apply_cenc_subsamples, derive_per_sample_iv};
-use crate::encrypter::Encrypter;
+use crate::cbc::{Aes128CbcPatternCipher, apply_cbcs_subsamples};
+use crate::cenc::{Subsample, apply_cenc_subsamples, derive_per_sample_iv, encrypted_block_count};
+use crate::encrypter::{Encrypter, Iv, Mode};
 use crate::error::Error;
 use crate::subsample::{self, CodecKind};
 use mediumi_mp4::boxes::{
@@ -14,8 +15,6 @@ use mediumi_mp4::{
 };
 use std::collections::HashMap;
 
-/// `aux_info_type = 'cenc'` (big-endian box_type as u32).
-const CENC_AUX_INFO_TYPE: u32 = u32::from_be_bytes(*b"cenc");
 /// `saiz` / `saio` flag: aux_info_type / parameter fields are present.
 const AUX_INFO_TYPE_PRESENT: u32 = 0x01;
 
@@ -54,6 +53,18 @@ pub(crate) fn enc_media(
                 continue;
             }
 
+            // `Iv` is Copy — take it by value so `enc.mode` is no longer borrowed
+            // and we can mutate enc.next_sample_index / next_block_offset below.
+            let iv = *enc.mode.iv();
+            let is_cbcs = matches!(enc.mode, Mode::Cbcs { .. });
+
+            // cbcs full-sample audio (Mp4a) is decryptable from the tenc constant
+            // IV alone, so it carries no senc/saiz/saio: encrypt in place but emit
+            // no auxiliary boxes. Everything else (all cenc, cbcs video) needs senc.
+            let emit_senc = !(is_cbcs && matches!(codec, CodecKind::Mp4a));
+            let (crypt_bb, skip_bb) = codec.cbcs_pattern();
+            let cbcs_cipher = is_cbcs.then(|| Aes128CbcPatternCipher::new(&enc.key));
+
             let mut senc_entries = Vec::with_capacity(ranges.len());
             let mut saiz_sizes = Vec::with_capacity(ranges.len());
             let mut use_subsamples = false;
@@ -68,14 +79,35 @@ pub(crate) fn enc_media(
                 }
                 let sample = &mut mdat[*offset..end];
                 let subs = subsample::plan(codec, sample)?;
-                let iv16 = derive_per_sample_iv(&enc.iv, enc.next_sample_index);
-                apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
+
+                let entry = if is_cbcs {
+                    let cipher = cbcs_cipher.as_ref().expect("cbcs cipher built above");
+                    apply_cbcs_subsamples(
+                        cipher,
+                        &iv.to_block16(),
+                        crypt_bb,
+                        skip_bb,
+                        &subs,
+                        sample,
+                    )?;
+                    build_senc_entry_cbcs(&subs)
+                } else {
+                    let iv16 =
+                        derive_per_sample_iv(&iv, enc.next_sample_index, enc.next_block_offset);
+                    apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
+                    if matches!(iv, Iv::Bytes16(_)) {
+                        enc.next_block_offset += encrypted_block_count(&subs, sample.len());
+                    }
+                    build_senc_entry_cenc(&iv, &iv16, &subs)
+                };
                 enc.next_sample_index += 1;
 
+                if !emit_senc {
+                    continue;
+                }
                 if !subs.is_empty() {
                     use_subsamples = true;
                 }
-                let entry = build_senc_entry(&iv16, &subs);
                 let entry_size = senc_entry_size(&entry);
                 if entry_size > u8::MAX as usize {
                     return Err(Error::SencEntryTooLarge(entry_size));
@@ -84,6 +116,11 @@ pub(crate) fn enc_media(
                 senc_entries.push(entry);
             }
 
+            if !emit_senc {
+                continue; // cbcs audio: encrypted, no auxiliary boxes
+            }
+
+            let aux_info_type = u32::from_be_bytes(enc.mode.scheme_fourcc());
             let sample_count = senc_entries.len() as u32;
             let flags = if use_subsamples {
                 SENC_FLAG_USE_SUBSAMPLES
@@ -99,7 +136,7 @@ pub(crate) fn enc_media(
                     version: 0,
                     flags: AUX_INFO_TYPE_PRESENT,
                 },
-                aux_info_type: Some(CENC_AUX_INFO_TYPE),
+                aux_info_type: Some(aux_info_type),
                 aux_info_type_parameter: Some(0),
                 default_sample_info_size: 0,
                 sample_count,
@@ -110,7 +147,7 @@ pub(crate) fn enc_media(
                     version: 0,
                     flags: AUX_INFO_TYPE_PRESENT,
                 },
-                aux_info_type: Some(CENC_AUX_INFO_TYPE),
+                aux_info_type: Some(aux_info_type),
                 aux_info_type_parameter: Some(0),
                 entry_count: 1,
                 offset: vec![0], // placeholder, patched below
@@ -234,10 +271,31 @@ fn sample_ranges(traf: &Traf, mdat_payload_pos: u64) -> Result<Vec<(usize, usize
     Ok(out)
 }
 
-fn build_senc_entry(iv16: &[u8; 16], subs: &[Subsample]) -> SencEntry {
-    // senc stores the per-sample IV — the HIGH 8 bytes of the counter block.
-    let iv = iv16[0..8].to_vec();
-    let subsamples = if subs.is_empty() {
+/// cenc senc entry: stores the per-sample IV plus the subsample map. The IV
+/// length matches `tenc.default_per_sample_iv_size`: 8 bytes (the high half of
+/// the counter block) for an 8-byte IV, or all 16 bytes for a 16-byte IV.
+fn build_senc_entry_cenc(iv: &Iv, iv16: &[u8; 16], subs: &[Subsample]) -> SencEntry {
+    let iv_bytes = match iv {
+        Iv::Bytes8(_) => iv16[0..8].to_vec(),
+        Iv::Bytes16(_) => iv16.to_vec(),
+    };
+    SencEntry {
+        iv: iv_bytes,
+        subsamples: build_subsample_entries(subs),
+    }
+}
+
+/// cbcs senc entry: the constant IV lives in tenc, so the entry carries no
+/// per-sample IV — only the subsample map.
+fn build_senc_entry_cbcs(subs: &[Subsample]) -> SencEntry {
+    SencEntry {
+        iv: Vec::new(),
+        subsamples: build_subsample_entries(subs),
+    }
+}
+
+fn build_subsample_entries(subs: &[Subsample]) -> Option<Vec<SubsampleEntry>> {
+    if subs.is_empty() {
         None
     } else {
         Some(
@@ -248,8 +306,7 @@ fn build_senc_entry(iv16: &[u8; 16], subs: &[Subsample]) -> SencEntry {
                 })
                 .collect(),
         )
-    };
-    SencEntry { iv, subsamples }
+    }
 }
 
 /// Return senc entry size
