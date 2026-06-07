@@ -1,10 +1,3 @@
-//! CENC `cenc` scheme — AES-128-CTR sample-level encryption with subsamples.
-//!
-//! In the `cenc` scheme the AES-CTR keystream is consumed only over the
-//! encrypted spans; clear spans are skipped (the counter does NOT advance
-//! through them). Per-sample IVs are derived from a base IV plus a big-endian
-//! sample counter in the low 8 bytes.
-
 use crate::ctr::Aes128CtrCipher;
 use crate::encrypter::Iv;
 use crate::error::Error;
@@ -79,11 +72,7 @@ pub fn derive_per_sample_iv(base_iv: &Iv, sample_index: u64, block_offset: u128)
     }
 }
 
-/// Number of 16-byte cipher blocks a sample's encrypted data consumes. cenc
-/// treats the encrypted spans as one logically continuous byte stream (clear
-/// gaps don't advance the keystream, ISO §9.3), so this is
-/// `ceil(total_encrypted / 16)`. Empty subsamples = full-sample (audio) →
-/// `ceil(sample_len / 16)`. Used to advance the 16-byte IV's block offset.
+/// Number of 16-byte cipher blocks a sample's encrypted data consumes.
 pub fn encrypted_block_count(subsamples: &[Subsample], sample_len: usize) -> u128 {
     let encrypted: u64 = if subsamples.is_empty() {
         sample_len as u64

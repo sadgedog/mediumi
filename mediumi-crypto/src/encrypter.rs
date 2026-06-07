@@ -41,9 +41,8 @@ impl Iv {
     }
 }
 
-/// Encryption scheme + its IV. cenc carries a per-sample IV base; cbcs carries
-/// a constant IV. Bundling the IV with the mode makes invalid combinations
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Encryption scheme + its IV. cenc carries a per-sample IV base; cbcs carries a constant IV.
+#[derive(Debug, PartialEq, Eq)]
 pub enum Mode {
     /// AES-CTR, per-sample IV (8 or 16 bytes is the base; see `derive_per_sample_iv`).
     Cenc { iv: Iv },
@@ -52,18 +51,9 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// The scheme's IV (per-sample base for cenc, constant for cbcs).
-    pub fn iv(&self) -> &Iv {
+    pub fn iv(&self) -> Iv {
         match self {
-            Mode::Cenc { iv } | Mode::Cbcs { iv } => iv,
-        }
-    }
-
-    /// scheme_type / aux_info_type 4cc.
-    pub fn scheme_fourcc(&self) -> [u8; 4] {
-        match self {
-            Mode::Cenc { .. } => *b"cenc",
-            Mode::Cbcs { .. } => *b"cbcs",
+            Mode::Cenc { iv } | Mode::Cbcs { iv } => *iv,
         }
     }
 }
@@ -71,6 +61,7 @@ impl Mode {
 /// Encrypter
 #[derive(Debug)]
 pub struct Encrypter {
+    /// Encryption scheme + its IV.
     pub mode: Mode,
     /// `tenc.default_KID`
     pub key_id: [u8; 16],
@@ -105,13 +96,11 @@ impl Encrypter {
     }
 
     /// Encrypt an init segment
-    /// need splitted moov box byte streams
     pub fn enc_init(&self, moov: &[u8]) -> Result<Vec<u8>, Error> {
         initial::enc_init(self, moov)
     }
 
-    /// Encrypt an init segment
-    /// need splitted moov, moof, mdat box byte streams
+    /// Encrypt a media segment
     pub fn enc_media(
         &mut self,
         moov: &[u8],
@@ -130,7 +119,7 @@ impl Encrypter {
         segment::enc_init_segment(self, init_bytes, out)
     }
 
-    /// Encrypt an init segment (return Vec<u8>)
+    /// Encrypt a media segment (return Vec<u8>)
     pub fn enc_init_segment_to_vec(&self, init_bytes: &[u8]) -> Result<Vec<u8>, Error> {
         let mut buf = Vec::new();
         self.enc_init_segment(init_bytes, &mut buf)?;
@@ -153,7 +142,7 @@ impl Encrypter {
         init_bytes: &[u8],
         media_bytes: &mut [u8],
     ) -> Result<Vec<u8>, Error> {
-        let mut buf = Vec::with_capacity(media_bytes.len());
+        let mut buf = Vec::new();
         self.enc_media_segment(init_bytes, media_bytes, &mut buf)?;
         Ok(buf)
     }

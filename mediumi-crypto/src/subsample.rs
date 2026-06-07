@@ -13,8 +13,6 @@ pub enum CodecKind {
     /// `length_size` is `avcC.length_size_minus_one + 1` (1, 2, or 4).
     /// `sps`/`pps` (parsed from avcC) let the AVC planner measure each VCL
     /// NAL's slice-header length and leave exactly that in the clear.
-    /// When `None` (avcC missing or unparsable) the planner
-    /// falls back to a fixed 32-byte clear leader.
     Avc {
         length_size: u8,
         sps: Option<Box<Sps>>,
@@ -24,8 +22,8 @@ pub enum CodecKind {
 
 impl CodecKind {
     /// cbcs pattern `(crypt_byte_block, skip_byte_block)` in 16-byte blocks.
-    /// Video uses 1:9 (encrypt 1 of every 10 blocks); audio uses 0:0 (no
-    /// pattern — every full block is encrypted).
+    /// Video uses 1:9 (encrypt 1 of every 10 blocks);
+    /// audio uses 0:0 (no pattern — every full block is encrypted).
     pub fn cbcs_pattern(&self) -> (u8, u8) {
         match self {
             CodecKind::Avc { .. } => (1, 9),

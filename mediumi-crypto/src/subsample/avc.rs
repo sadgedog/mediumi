@@ -1,12 +1,3 @@
-//! NAL-aware subsample planner for AVC / H.264.
-//!
-//! Walks length-prefixed NAL units and classifies each by `nal_unit_type`.
-//! VCL slice NALs (type 1/5) get a clear leader of `NAL header byte + the actual
-//! slice-header length` (parsed from SPS/PPS), leaving only the slice data
-//! encrypted. A VCL NAL whose slice header cannot be parsed is a hard error.
-//! A VCL NAL whose protected slice data would be ≤ 16 bytes, and all non-VCL NALs,
-//! stay fully clear and fold into the next encrypted NAL's clear prefix.
-
 use crate::cenc::Subsample;
 use crate::error::Error;
 use mediumi_h264::nal::{NalUnit, NalUnitType};
@@ -15,9 +6,8 @@ use mediumi_h264::slice_header::SliceHeader;
 use mediumi_h264::sps::Sps;
 use mediumi_h264::util::bitstream::BitstreamReader;
 
-/// A VCL NAL whose protected (post-leader) slice data is this many bytes or
-/// fewer is left completely unencrypted (cbcs encrypts nothing below one 16-byte
-/// block; Apple: "48 bytes or fewer is completely unencrypted").
+/// A VCL NAL whose protected (post-leader) slice data is
+/// this many bytes or fewer is left completely unencrypted.
 const MIN_ENCRYPTED_BYTES: usize = 16;
 
 fn is_vcl(nal_type: u8) -> bool {

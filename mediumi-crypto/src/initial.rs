@@ -6,15 +6,6 @@ use mediumi_mp4::boxes::{
 use mediumi_mp4::sample_entry::wrap_with_sinf;
 use mediumi_mp4::{Mp4Box, demuxer, muxer};
 
-/// cbcs pattern `(crypt_byte_block, skip_byte_block)` for a sample-entry box_type.
-/// Video=1:9, audio=0:0
-fn cbcs_pattern(box_type: &[u8; 4]) -> (u8, u8) {
-    match box_type {
-        b"avc1" | b"avc3" => (1, 9),
-        _ => (0, 0),
-    }
-}
-
 pub(crate) fn enc_init(enc: &Encrypter, moov_bytes: &[u8]) -> Result<Vec<u8>, Error> {
     let mut boxes = demuxer::demux(moov_bytes)?;
     let mut found_moov = false;
@@ -116,5 +107,14 @@ fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
             others: Vec::new(),
         }),
         others: Vec::new(),
+    }
+}
+
+/// cbcs pattern `(crypt_byte_block, skip_byte_block)` for a sample-entry box_type.
+/// Video=1:9, audio=0:0
+fn cbcs_pattern(box_type: &[u8; 4]) -> (u8, u8) {
+    match box_type {
+        b"avc1" | b"avc3" => (1, 9),
+        _ => (0, 0),
     }
 }

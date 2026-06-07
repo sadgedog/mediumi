@@ -16,9 +16,7 @@ impl Aes128CtrCipher {
         }
     }
 
-    /// XOR the AES-CTR keystream into `buf` in place. The counter advances by
-    /// `ceil(buf.len() / 16)` blocks; calling this repeatedly on the same
-    /// cipher continues the keystream across non-contiguous spans.
+    /// XOR the AES-CTR keystream into `buf` in place.
     pub fn apply_keystream(&mut self, buf: &mut [u8]) {
         self.inner.apply_keystream(buf);
     }

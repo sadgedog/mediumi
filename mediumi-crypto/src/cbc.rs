@@ -1,20 +1,10 @@
-//! AES-128-CBC with pattern encryption (the `cbcs` cipher primitive).
-//!
-//! Unlike cenc's single continuous CTR keystream, cbcs encrypts each protected
-//! span independently: AES-CBC starting from a **constant IV**, applied over a
-//! `crypt`:`skip` block pattern (16-byte blocks), with the trailing `< 16` byte
-//! remainder left in the clear. CBC chaining runs across **crypt blocks only** —
-//! skip blocks are passed through untouched and do not advance the chain.
-
 use aes::cipher::{BlockCipherEncrypt, KeyInit};
 use aes::{Aes128, Block};
 
 use crate::cenc::Subsample;
 use crate::error::Error;
 
-/// AES-128 block cipher wrapper for cbcs pattern encryption. Holds the key
-/// schedule; each protected span restarts CBC from the constant IV, so no
-/// streaming state is carried between spans.
+/// AES-128 block cipher wrapper for cbcs pattern encryption.
 pub struct Aes128CbcPatternCipher {
     cipher: Aes128,
 }
@@ -26,10 +16,7 @@ impl Aes128CbcPatternCipher {
         }
     }
 
-    /// Encrypt one protected span in place: AES-CBC from `constant_iv`, applying
-    /// the `crypt_byte_block : skip_byte_block` pattern over 16-byte blocks. The
-    /// trailing `< 16` byte remainder is left in the clear. `crypt_byte_block == 0`
-    /// means "no pattern" — every full block is encrypted (cbcs audio, 0:0).
+    /// Encrypt one protected span in place
     pub fn apply_pattern(
         &self,
         constant_iv: &[u8; 16],
@@ -70,10 +57,6 @@ impl Aes128CbcPatternCipher {
 }
 
 /// Apply `cbcs` encryption to `buf` in place.
-///
-/// Empty `subsamples` = full-sample (audio): the whole buffer is one protected
-/// span. Non-empty (video): each subsample's protected bytes form an independent
-/// CBC span (each restarts from `constant_iv`); clear bytes are skipped.
 pub fn apply_cbcs_subsamples(
     cipher: &Aes128CbcPatternCipher,
     constant_iv: &[u8; 16],

@@ -2,48 +2,21 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
-    // --- cipher / subsample ---
-    /// The sum of subsample byte counts did not match the buffer length.
     SubsampleByteMismatch { expected: usize, actual: usize },
-    /// A single senc entry would exceed the `saiz` u8 per-sample size limit
-    /// (i.e. the sample has too many subsamples).
     SencEntryTooLarge(usize),
-
-    // --- AVC subsample walking ---
-    /// A NAL length prefix or NAL body ran past the sample buffer.
     TruncatedNal,
-    /// A NAL unit declared a length of zero.
     ZeroLengthNal,
-    /// avcC `length_size_minus_one + 1` was not 1, 2, or 4.
     InvalidLengthSize(u8),
-    /// A VCL NAL's slice header could not be parsed (SPS/PPS missing or
-    /// unparsable, or a malformed slice header).
     SliceHeaderParseFailed,
-
-    // --- container ---
-    /// Underlying `mediumi-mp4` parse / serialize error.
     Mp4(mediumi_mp4::Error),
-    /// `moov` box not found in the input.
     NoMoov,
-    /// The moov contained no track that could be encrypted (no supported codec
-    /// sample entry). Encrypting it would produce a moov that advertises
-    /// protection it doesn't carry.
     NoEncryptableTrack,
-    /// `moof` box not found in the input.
     NoMoof,
-    /// A `moof` was not immediately followed by an `mdat` in the media segment.
     NoMdatAfterMoof,
-    /// An AVC track is missing its `avcC` configuration record.
     MissingAvcc,
-    /// A `trun` sample size could not be determined (no per-sample size and no
-    /// `tfhd` default).
     MissingSampleSize,
-    /// A computed sample byte range exceeded the `mdat` buffer.
     SampleOutOfBounds { end: usize, mdat_len: usize },
-    /// The serialized moof did not contain the expected `senc` box(es) during
-    /// the saio-offset fixup pass.
     SaioFixupFailed,
-    /// I/O error while writing an encrypted segment.
     Io(std::io::Error),
 }
 

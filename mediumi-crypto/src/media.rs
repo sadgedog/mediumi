@@ -51,17 +51,19 @@ pub(crate) fn enc_media(
                 continue;
             }
 
-            // `Iv` is Copy — take it by value so `enc.mode` is no longer borrowed
-            // and we can mutate enc.next_sample_index / next_block_offset below.
-            let iv = *enc.mode.iv();
-            let is_cbcs = matches!(enc.mode, Mode::Cbcs { .. });
+            let iv = enc.mode.iv();
+            let cbcs = match enc.mode {
+                Mode::Cbcs { .. } => {
+                    let (crypt_bb, skip_bb) = codec.cbcs_pattern();
+                    Some((Aes128CbcPatternCipher::new(&enc.key), crypt_bb, skip_bb))
+                }
+                Mode::Cenc { .. } => None,
+            };
 
             // cbcs full-sample audio (Mp4a) is decryptable from the tenc constant
             // IV alone, so it carries no senc/saiz/saio: encrypt in place but emit
             // no auxiliary boxes. Everything else (all cenc, cbcs video) needs senc.
-            let emit_senc = !(is_cbcs && matches!(codec, CodecKind::Mp4a));
-            let (crypt_bb, skip_bb) = codec.cbcs_pattern();
-            let cbcs_cipher = is_cbcs.then(|| Aes128CbcPatternCipher::new(&enc.key));
+            let emit_senc = !(cbcs.is_some() && matches!(codec, CodecKind::Mp4a));
 
             let mut senc_entries = Vec::with_capacity(ranges.len());
             let mut saiz_sizes = Vec::with_capacity(ranges.len());
@@ -78,25 +80,27 @@ pub(crate) fn enc_media(
                 let sample = &mut mdat[*offset..end];
                 let subs = subsample::plan(codec, sample)?;
 
-                let entry = if is_cbcs {
-                    let cipher = cbcs_cipher.as_ref().expect("cbcs cipher built above");
-                    apply_cbcs_subsamples(
-                        cipher,
-                        &iv.to_block16(),
-                        crypt_bb,
-                        skip_bb,
-                        &subs,
-                        sample,
-                    )?;
-                    build_senc_entry_cbcs(&subs)
-                } else {
-                    let iv16 =
-                        derive_per_sample_iv(&iv, enc.next_sample_index, enc.next_block_offset);
-                    apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
-                    if matches!(iv, Iv::Bytes16(_)) {
-                        enc.next_block_offset += encrypted_block_count(&subs, sample.len());
+                let entry = match &cbcs {
+                    Some((cipher, crypt_bb, skip_bb)) => {
+                        apply_cbcs_subsamples(
+                            cipher,
+                            &iv.to_block16(),
+                            *crypt_bb,
+                            *skip_bb,
+                            &subs,
+                            sample,
+                        )?;
+                        build_senc_entry_cbcs(&subs)
                     }
-                    build_senc_entry_cenc(&iv, &iv16, &subs)
+                    None => {
+                        let iv16 =
+                            derive_per_sample_iv(&iv, enc.next_sample_index, enc.next_block_offset);
+                        apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
+                        if matches!(iv, Iv::Bytes16(_)) {
+                            enc.next_block_offset += encrypted_block_count(&subs, sample.len());
+                        }
+                        build_senc_entry_cenc(&iv, &iv16, &subs)
+                    }
                 };
                 enc.next_sample_index += 1;
 
@@ -158,7 +162,7 @@ pub(crate) fn enc_media(
         return Ok(moof_boxes[moof_idx].to_bytes());
     }
 
-    // Pass 1: serialize to learn where each senc lands within the moof.
+    // Serialize to learn where each senc lands within the moof.
     let pass1 = moof_boxes[moof_idx].to_bytes();
     let senc_offsets = scan_senc_box_offsets(&pass1);
     if senc_offsets.len() != trafs_with_senc.len() {
@@ -190,7 +194,7 @@ pub(crate) fn enc_media(
         }
     }
 
-    // Pass 2: re-serialize with correct offsets (box sizes unchanged).
+    // Re-serialize with correct offsets (box sizes unchanged).
     Ok(moof_boxes[moof_idx].to_bytes())
 }
 
