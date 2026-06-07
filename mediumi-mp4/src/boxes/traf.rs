@@ -42,14 +42,14 @@ impl BaseBox for Traf {
         for subs in &self.subs {
             subs.write_box(writer);
         }
-        for senc in &self.sencs {
-            senc.write_box(writer);
-        }
         for saiz in &self.saizs {
             saiz.write_box(writer);
         }
         for saio in &self.saios {
             saio.write_box(writer);
+        }
+        for senc in &self.sencs {
+            senc.write_box(writer);
         }
         if let Some(ref meta) = self.meta {
             meta.write_box(writer);
