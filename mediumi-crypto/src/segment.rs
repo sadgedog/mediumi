@@ -3,11 +3,12 @@
 //! - [`enc_init_segment`] encrypts a whole init segment.
 //! - [`enc_media_segment`] encrypts a whole media segment.
 
+use crate::box_walk::TopLevelBoxes;
 use crate::encrypter::Encrypter;
 use crate::error::Error;
 use crate::{initial, media};
 use mediumi_mp4::types::BoxType;
-use mediumi_mp4::{BoxHeader, BoxSize, Mp4Box, demuxer};
+use mediumi_mp4::{Mp4Box, demuxer};
 use std::io::Write;
 
 pub struct MediaSegmentParts<'a> {
@@ -57,49 +58,27 @@ pub(crate) fn enc_media_segment<W: Write>(
 }
 
 fn extract_moov(init: &[u8]) -> Result<&[u8], Error> {
-    let mut offset = 0usize;
-    while offset < init.len() {
-        let header = BoxHeader::parse(&init[offset..]).map_err(Error::Mp4)?;
-        let total = match header.box_size {
-            BoxSize::Normal(s) => s as usize,
-            BoxSize::Large(s) => s as usize,
-            BoxSize::ExtendsToEnd => init.len() - offset,
-        };
-        if total == 0 || offset + total > init.len() {
-            return Err(Error::Mp4(mediumi_mp4::Error::DataTooShort));
-        }
+    for (header, start, total) in TopLevelBoxes::new(init) {
         if header.box_type == BoxType::Moov {
-            return Ok(&init[offset..offset + total]);
+            return Ok(&init[start..start + total]);
         }
-        offset += total;
     }
     Err(Error::NoMoov)
 }
 
 pub fn split_media_segment(segment: &mut [u8]) -> Result<MediaSegmentParts<'_>, Error> {
-    let mut offset = 0usize;
     let mut moof: Option<(usize, usize)> = None; // (start, total len)
     let mut mdat: Option<(usize, usize, usize)> = None; // (start, header size, total len)
 
-    while offset < segment.len() {
-        let header = BoxHeader::parse(&segment[offset..]).map_err(Error::Mp4)?;
-        let total = match header.box_size {
-            BoxSize::Normal(s) => s as usize,
-            BoxSize::Large(s) => s as usize,
-            BoxSize::ExtendsToEnd => segment.len() - offset,
-        };
-        if total == 0 || offset + total > segment.len() {
-            return Err(Error::Mp4(mediumi_mp4::Error::DataTooShort));
-        }
+    for (header, start, total) in TopLevelBoxes::new(segment) {
         match header.box_type {
-            BoxType::Moof => moof = Some((offset, total)),
+            BoxType::Moof => moof = Some((start, total)),
             BoxType::Mdat if moof.is_some() => {
-                mdat = Some((offset, header.header_size, total));
+                mdat = Some((start, header.header_size, total));
                 break;
             }
             _ => {}
         }
-        offset += total;
     }
 
     let (moof_start, moof_len) = moof.ok_or(Error::NoMoof)?;

@@ -1,20 +1,19 @@
+use crate::box_walk::next_box;
 use crate::cbc::{Aes128CbcPatternCipher, apply_cbcs_subsamples};
-use crate::cenc::{Subsample, apply_cenc_subsamples, derive_per_sample_iv, encrypted_block_count};
+use crate::cenc::{apply_cenc_subsamples, derive_per_sample_iv, encrypted_block_count};
 use crate::encrypter::{Encrypter, Iv, Mode};
 use crate::error::Error;
+use crate::senc::{build_senc_entry_cbcs, build_senc_entry_cenc, senc_entry_size};
 use crate::subsample::{self, CodecKind};
-use mediumi_h264::{nal::NalUnit, pps::Pps, sps::Sps};
+use crate::track::build_track_table;
 use mediumi_mp4::boxes::{
     FullBoxHeader,
     saio::Saio,
     saiz::Saiz,
-    senc::{SENC_FLAG_USE_SUBSAMPLES, Senc, SencEntry, SubsampleEntry},
+    senc::{SENC_FLAG_USE_SUBSAMPLES, Senc},
     traf::Traf,
 };
-use mediumi_mp4::{
-    BoxHeader, BoxSize, Mp4Box, demuxer, find_codec_config, iter_traks, types::BoxType,
-};
-use std::collections::HashMap;
+use mediumi_mp4::{BoxHeader, Mp4Box, demuxer, types::BoxType};
 
 pub(crate) fn enc_media(
     enc: &mut Encrypter,
@@ -198,81 +197,6 @@ pub(crate) fn enc_media(
     Ok(moof_boxes[moof_idx].to_bytes())
 }
 
-fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, CodecKind>, Error> {
-    let mut tracks = HashMap::new();
-    for trak in iter_traks(moov_boxes) {
-        let Some(stbl) = trak.mdia.minf.stbl.as_ref() else {
-            continue;
-        };
-        let Some(entry) = stbl.stsd.entries.first() else {
-            continue;
-        };
-        let codec = match &entry.box_type {
-            b"avc1" | b"avc3" | b"encv" => {
-                let cfg = find_codec_config(trak, b"avcC").ok_or(Error::MissingAvcc)?;
-                // avcC: cfg_version(1) profile(1) compat(1) level(1)
-                //       | 6-bit reserved + 2-bit length_size_minus_one
-                if cfg.len() < 5 {
-                    return Err(Error::MissingAvcc);
-                }
-                let (sps, pps) = parse_avcc_sps_pps(cfg);
-                CodecKind::Avc {
-                    length_size: (cfg[4] & 0b0000_0011) + 1,
-                    sps,
-                    pps,
-                }
-            }
-            b"mp4a" | b"enca" => CodecKind::Mp4a,
-            _ => continue,
-        };
-        tracks.insert(trak.tkhd.track_id, codec);
-    }
-    Ok(tracks)
-}
-
-/// Extract and parse the first SPS and PPS from an `avcC` configuration record.
-fn parse_avcc_sps_pps(avcc: &[u8]) -> (Option<Box<Sps>>, Option<Box<Pps>>) {
-    fn inner(avcc: &[u8]) -> Option<(Box<Sps>, Box<Pps>)> {
-        // avcC: configVer(1) profile(1) compat(1) level(1) lengthSizeM1(1)
-        //       numSPS(1) [len(2) SPS NAL]... numPPS(1) [len(2) PPS NAL]...
-        if avcc.len() < 6 {
-            return None;
-        }
-        let num_sps = avcc[5] & 0x1f;
-        let mut p = 6usize;
-        let mut sps: Option<Sps> = None;
-        for _ in 0..num_sps {
-            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
-            p += 2;
-            let nal = avcc.get(p..p + len)?;
-            p += len;
-            if sps.is_none() && nal.len() > 1 {
-                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
-                sps = Sps::parse(&rbsp).ok();
-            }
-        }
-        let sps = sps?;
-        let num_pps = *avcc.get(p)?;
-        p += 1;
-        let mut pps: Option<Pps> = None;
-        for _ in 0..num_pps {
-            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
-            p += 2;
-            let nal = avcc.get(p..p + len)?;
-            p += len;
-            if pps.is_none() && nal.len() > 1 {
-                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
-                pps = Pps::parse(&rbsp, &sps).ok();
-            }
-        }
-        Some((Box::new(sps), Box::new(pps?)))
-    }
-    match inner(avcc) {
-        Some((sps, pps)) => (Some(sps), Some(pps)),
-        None => (None, None),
-    }
-}
-
 /// Sample byte ranges within the mdat payload, accumulated from trun.
 ///
 ///   [moof[ traf(video)  traf(audio) ]]  [mdat[ video │ audio ]]
@@ -318,54 +242,6 @@ fn sample_ranges(traf: &Traf, mdat_payload_pos: u64) -> Result<Vec<(usize, usize
     Ok(out)
 }
 
-/// cenc senc entry: stores the per-sample IV plus the subsample map. The IV
-/// length matches `tenc.default_per_sample_iv_size`: 8 bytes (the high half of
-/// the counter block) for an 8-byte IV, or all 16 bytes for a 16-byte IV.
-fn build_senc_entry_cenc(iv: &Iv, iv16: &[u8; 16], subs: &[Subsample]) -> SencEntry {
-    let iv_bytes = match iv {
-        Iv::Bytes8(_) => iv16[0..8].to_vec(),
-        Iv::Bytes16(_) => iv16.to_vec(),
-    };
-    SencEntry {
-        iv: iv_bytes,
-        subsamples: build_subsample_entries(subs),
-    }
-}
-
-/// cbcs senc entry: the constant IV lives in tenc, so the entry carries no
-/// per-sample IV — only the subsample map.
-fn build_senc_entry_cbcs(subs: &[Subsample]) -> SencEntry {
-    SencEntry {
-        iv: Vec::new(),
-        subsamples: build_subsample_entries(subs),
-    }
-}
-
-fn build_subsample_entries(subs: &[Subsample]) -> Option<Vec<SubsampleEntry>> {
-    if subs.is_empty() {
-        None
-    } else {
-        Some(
-            subs.iter()
-                .map(|s| SubsampleEntry {
-                    bytes_of_clear_data: s.clear as u16,
-                    bytes_of_protected_data: s.encrypted,
-                })
-                .collect(),
-        )
-    }
-}
-
-/// Return senc entry size
-/// iv + N * [ subsample_count(2) + subsample.len() * (clear(2) + enc(4)) ]
-fn senc_entry_size(entry: &SencEntry) -> usize {
-    let mut size = entry.iv.len();
-    if let Some(subs) = &entry.subsamples {
-        size += 2 + subs.len() * 6;
-    }
-    size
-}
-
 /// Find each `senc` box's start offset by walking the serialized moof's box tree
 /// moof → traf → senc
 fn scan_senc_box_offsets(buf: &[u8]) -> Vec<usize> {
@@ -390,22 +266,6 @@ fn scan_senc_box_offsets(buf: &[u8]) -> Vec<usize> {
         offset += total;
     }
     out
-}
-
-fn next_box(buf: &[u8], offset: usize, end: usize) -> Option<(BoxHeader, usize)> {
-    if offset + 8 > end {
-        return None;
-    }
-    let header = BoxHeader::parse(&buf[offset..end]).ok()?;
-    let total = match header.box_size {
-        BoxSize::Normal(s) => s as usize,
-        BoxSize::Large(s) => s as usize,
-        BoxSize::ExtendsToEnd => end - offset,
-    };
-    if total < header.header_size || offset + total > end {
-        return None;
-    }
-    Some((header, total))
 }
 
 #[cfg(test)]
