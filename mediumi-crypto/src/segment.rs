@@ -15,6 +15,8 @@ pub struct MediaSegmentParts<'a> {
     pub prefix: &'a [u8],
     pub moof: &'a [u8],
     pub mdat: &'a mut [u8],
+    /// mdat box header byte length (8, or 16 for a 64-bit largesize mdat).
+    pub mdat_header_size: usize,
 }
 
 pub(crate) fn enc_init_segment<W: Write>(
@@ -47,7 +49,7 @@ pub(crate) fn enc_media_segment<W: Write>(
 ) -> Result<(), Error> {
     let moov = extract_moov(init_bytes)?;
     let parts = split_media_segment(media_bytes)?;
-    let new_moof = media::enc_media(enc, moov, parts.moof, parts.mdat)?;
+    let new_moof = media::enc_media(enc, moov, parts.moof, parts.mdat, parts.mdat_header_size)?;
 
     out.write_all(parts.prefix)?;
     out.write_all(&new_moof)?;
@@ -95,5 +97,6 @@ pub fn split_media_segment(segment: &mut [u8]) -> Result<MediaSegmentParts<'_>, 
         prefix,
         moof: moof_slice,
         mdat: mdat_payload,
+        mdat_header_size: mdat_hdr,
     })
 }

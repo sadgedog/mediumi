@@ -5,6 +5,13 @@ use crate::cenc::Subsample;
 use crate::error::Error;
 use mediumi_h264::{pps::Pps, sps::Sps};
 
+pub(crate) const ENCRYPTABLE_VIDEO: [[u8; 4]; 2] = [*b"avc1", *b"avc3"];
+pub(crate) const ENCRYPTABLE_AUDIO: [[u8; 4]; 1] = [*b"mp4a"];
+
+pub(crate) fn is_encryptable(fourcc: &[u8; 4]) -> bool {
+    ENCRYPTABLE_VIDEO.contains(fourcc) || ENCRYPTABLE_AUDIO.contains(fourcc)
+}
+
 #[derive(Debug, Clone)]
 pub enum CodecKind {
     /// AAC (`mp4a`): full-sample encryption, no subsamples.

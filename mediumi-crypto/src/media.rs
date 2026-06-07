@@ -20,6 +20,7 @@ pub(crate) fn enc_media(
     moov_bytes: &[u8],
     moof_bytes: &[u8],
     mdat: &mut [u8],
+    mdat_header_size: usize,
 ) -> Result<Vec<u8>, Error> {
     let moov_boxes = demuxer::demux(moov_bytes)?;
     let tracks = build_track_table(&moov_boxes)?;
@@ -32,10 +33,7 @@ pub(crate) fn enc_media(
 
     let mut trafs_with_senc: Vec<usize> = Vec::new();
 
-    // Distance from the moof start to the mdat payload start (original moof size
-    // + 8-byte mdat box header). Used to map each trun's moof-relative
-    // data_offset onto an offset within the mdat payload.
-    let mdat_payload_pos = moof_bytes.len() as u64 + 8;
+    let mdat_payload_pos = moof_bytes.len() as u64 + mdat_header_size as u64;
 
     {
         let Mp4Box::Moof(moof) = &mut moof_boxes[moof_idx] else {
@@ -183,8 +181,9 @@ pub(crate) fn enc_media(
                 }
             }
         }
-        // Patch each saio.offset to the first IV byte of the matching senc:
-        // senc_box_start + 8 (box header) + 4 (FullBoxHeader) + 4 (sample_count).
+        // Patch each saio.offset to the first aux-info byte of the matching
+        // senc: senc_box_start + 8 (box header) + 4 (FullBoxHeader) + 4 (sample_count).
+        // This offset is moof-relative (NOT segment/file absolute)
         for (i, &traf_idx) in trafs_with_senc.iter().enumerate() {
             let payload_offset = (senc_offsets[i] + 16) as u64;
             if let Some(saio) = moof.trafs[traf_idx].saios.last_mut() {
@@ -204,7 +203,7 @@ pub(crate) fn enc_media(
 ///             │              └ data_offset ─────│────────┘
 ///             └ data_offset ────────────────────┘
 ///
-///   offset in mdat = data_offset − mdat_payload_pos   (= moof size + 8)
+///   offset in mdat = data_offset − mdat_payload_pos   (= moof size + mdat header)
 fn sample_ranges(traf: &Traf, mdat_payload_pos: u64) -> Result<Vec<(usize, usize)>, Error> {
     let base = traf.tfhd.base_data_offset.unwrap_or(0);
 

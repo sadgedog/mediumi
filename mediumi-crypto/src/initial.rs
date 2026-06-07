@@ -1,5 +1,6 @@
 use crate::encrypter::{Encrypter, Mode};
 use crate::error::Error;
+use crate::subsample;
 use mediumi_mp4::boxes::{
     FullBoxHeader, frma::Frma, schi::Schi, schm::Schm, sinf::Sinf, tenc::Tenc,
 };
@@ -23,7 +24,7 @@ pub(crate) fn enc_init(enc: &Encrypter, moov_bytes: &[u8]) -> Result<Vec<u8>, Er
                 continue;
             };
             let original = entry.box_type;
-            if !is_encryptable(&original) {
+            if !subsample::is_encryptable(&original) {
                 continue;
             }
             let sinf = build_sinf(enc, original);
@@ -45,10 +46,6 @@ pub(crate) fn enc_init(enc: &Encrypter, moov_bytes: &[u8]) -> Result<Vec<u8>, Er
     }
 
     Ok(muxer::mux(&boxes))
-}
-
-fn is_encryptable(fourcc: &[u8; 4]) -> bool {
-    matches!(fourcc, b"avc1" | b"avc3" | b"mp4a")
 }
 
 fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
@@ -113,8 +110,9 @@ fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
 /// cbcs pattern `(crypt_byte_block, skip_byte_block)` for a sample-entry box_type.
 /// Video=1:9, audio=0:0
 fn cbcs_pattern(box_type: &[u8; 4]) -> (u8, u8) {
-    match box_type {
-        b"avc1" | b"avc3" => (1, 9),
-        _ => (0, 0),
+    if subsample::ENCRYPTABLE_VIDEO.contains(box_type) {
+        (1, 9)
+    } else {
+        (0, 0)
     }
 }

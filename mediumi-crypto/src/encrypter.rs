@@ -58,7 +58,10 @@ impl Mode {
     }
 }
 
-/// Encrypter
+/// Encrypts the init and media segments of one track under a single content key.
+///
+/// Caution: for **cenc (AES-CTR)** every per-sample counter value must be unique under a given key.
+/// A repeated counter reuses the keystream and leaks plaintext via XOR (the "many-time pad" failure mode).
 #[derive(Debug)]
 pub struct Encrypter {
     /// Encryption scheme + its IV.
@@ -106,8 +109,9 @@ impl Encrypter {
         moov: &[u8],
         moof: &[u8],
         mdat: &mut [u8],
+        mdat_header_size: usize,
     ) -> Result<Vec<u8>, Error> {
-        media::enc_media(self, moov, moof, mdat)
+        media::enc_media(self, moov, moof, mdat, mdat_header_size)
     }
 
     /// Encrypt an init segment
