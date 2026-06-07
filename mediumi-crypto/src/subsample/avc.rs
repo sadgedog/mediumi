@@ -1,16 +1,30 @@
 //! NAL-aware subsample planner for AVC / H.264.
 //!
 //! Walks length-prefixed NAL units and classifies each by `nal_unit_type`.
-//! VCL slice NALs get a `(prefix + 1, rest)` clear/encrypted split (NAL header byte stays clear)
-//! non-VCL NALs are fully clear and folded into the next VCL NAL's clear prefix.
+//! VCL slice NALs (type 1/5) larger than 48 bytes get a 32-byte clear leader
+//! (NAL header + slice header) with the rest encrypted; the leader lets hardware
+//! decoders (FairPlay / Widevine L1) parse the slice header before decryption,
+//! per Apple HLS Sample Encryption and CENC v3. VCL NALs of 48 bytes or fewer,
+//! and all non-VCL NALs, stay fully clear and fold into the next encrypted NAL's
+//! clear prefix.
 
 use crate::cenc::Subsample;
 use crate::error::Error;
 
-/// H.264 VCL NAL types: 1 (non-IDR), 2–4 (data partitions), 5 (IDR),
-/// 19 (auxiliary coded picture), 20 (slice extension).
+/// VCL NAL clear leader: the `nal_unit_type` byte plus the 31 bytes that follow
+/// stay unencrypted (Apple HLS Sample Encryption / CENC v3). The slice header
+/// fits inside this leader, so hardware decoders can parse it before decryption.
+const VCL_CLEAR_LEADER: u64 = 32;
+/// A VCL NAL of this size (bytes after the length prefix) or fewer is left
+/// completely unencrypted: 32-byte leader + one 16-byte protected block = 48.
+const MIN_ENCRYPTABLE_NAL: usize = 48;
+
+/// NAL types that Apple HLS Sample Encryption / CENC v3 encrypt: 1 (non-IDR
+/// coded slice) and 5 (IDR coded slice) only. Data-partition (2–4) and
+/// SVC/MVC extension (19/20) NALs MUST NOT be encrypted under Apple's spec and
+/// are not produced by mainstream AVC encoders.
 fn is_vcl(nal_type: u8) -> bool {
-    matches!(nal_type, 1..=5 | 19 | 20)
+    matches!(nal_type, 1 | 5)
 }
 
 pub fn plan(sample: &[u8], length_size: u8) -> Result<Vec<Subsample>, Error> {
@@ -41,16 +55,16 @@ pub fn plan(sample: &[u8], length_size: u8) -> Result<Vec<Subsample>, Error> {
         }
 
         let nal_type = sample[prefix_end] & 0b0001_1111;
-        if is_vcl(nal_type) {
-            // clear = accumulated non-VCL bytes + this NAL's length prefix + NAL header byte
-            // [ pending non-VCL ][ len ][ header ][ slice payload ]
-            //  └────────────── clear ────────────┘└── encrypted ──┘
-            let clear = pending_clear + ls as u64 + 1;
-            let encrypted = (nal_len - 1) as u64;
+        if is_vcl(nal_type) && nal_len > MIN_ENCRYPTABLE_NAL {
+            // clear = accumulated clear bytes + this NAL's length prefix + 32-byte leader
+            // [ pending clear ][ len ][ 32-byte leader ][ encrypted slice data ]
+            //  └──────────────── clear ────────────────┘└─────── encrypted ────┘
+            let clear = pending_clear + ls as u64 + VCL_CLEAR_LEADER;
+            let encrypted = nal_len as u64 - VCL_CLEAR_LEADER;
             push_clear_split(&mut out, clear, encrypted);
             pending_clear = 0;
         } else {
-            // entire non-VCL NAL (prefix + body) stays clear
+            // non-VCL NAL, or a VCL NAL ≤ 48 bytes → entire NAL (prefix + body) stays clear
             pending_clear += ls as u64 + nal_len as u64;
         }
         offset = nal_end;
@@ -106,27 +120,56 @@ mod tests {
     }
 
     #[test]
-    fn single_idr_4byte_prefix() {
-        let sample = lp_nal(4, 5, 8); // IDR, 8-byte body
+    fn idr_over_48_gets_32_byte_leader() {
+        // IDR with 64-byte body → nal_len 65 > 48 → 32-byte leader, rest encrypted.
+        let sample = lp_nal(4, 5, 64);
         let plan = plan(&sample, 4).unwrap();
+        // clear = length prefix(4) + 32-byte leader = 36, encrypted = 65 - 32 = 33
         assert_eq!(
             plan,
             vec![Subsample {
-                clear: 5,
-                encrypted: 8
+                clear: 36,
+                encrypted: 33
             }]
         );
     }
 
     #[test]
-    fn single_non_idr_2byte_prefix() {
+    fn non_idr_over_48_gets_32_byte_leader() {
+        // non-IDR with 50-byte body → nal_len 51 > 48 (2-byte length prefix).
         let sample = lp_nal(2, 1, 50);
         let plan = plan(&sample, 2).unwrap();
+        // clear = prefix(2) + 32 = 34, encrypted = 51 - 32 = 19
         assert_eq!(
             plan,
             vec![Subsample {
-                clear: 3,
-                encrypted: 50
+                clear: 34,
+                encrypted: 19
+            }]
+        );
+    }
+
+    #[test]
+    fn vcl_48_bytes_or_fewer_fully_clear() {
+        // nal_len exactly 48 (47-byte body) → completely unencrypted.
+        let sample = lp_nal(4, 5, 47);
+        // whole NAL clear: prefix(4) + nal_len(48) = 52
+        assert_eq!(
+            plan(&sample, 4).unwrap(),
+            vec![Subsample {
+                clear: 52,
+                encrypted: 0
+            }]
+        );
+
+        // nal_len 49 (48-byte body) → just over threshold → leader + encrypt.
+        let sample = lp_nal(4, 5, 48);
+        // clear = 4 + 32 = 36, encrypted = 49 - 32 = 17
+        assert_eq!(
+            plan(&sample, 4).unwrap(),
+            vec![Subsample {
+                clear: 36,
+                encrypted: 17
             }]
         );
     }
@@ -136,14 +179,32 @@ mod tests {
         let mut sample = Vec::new();
         sample.extend(lp_nal(4, 7, 10)); // SPS: 4+1+10 = 15
         sample.extend(lp_nal(4, 8, 4)); //  PPS: 4+1+4  = 9
-        sample.extend(lp_nal(4, 5, 100)); // IDR: clear prefix 5, enc 100
+        sample.extend(lp_nal(4, 5, 100)); // IDR: nal_len 101 > 48
         let plan = plan(&sample, 4).unwrap();
-        // clear = 15 + 9 + 5 = 29, encrypted = 100
+        // clear = 15 + 9 + prefix(4) + 32 = 60, encrypted = 101 - 32 = 69
         assert_eq!(
             plan,
             vec![Subsample {
-                clear: 29,
-                encrypted: 100
+                clear: 60,
+                encrypted: 69
+            }]
+        );
+    }
+
+    #[test]
+    fn data_partition_and_extension_not_encrypted() {
+        // type 2 (data partition A) is NOT VCL for encryption (Apple/CENC v3
+        // encrypt only 1/5) → stays clear, folded into the next IDR's prefix.
+        let mut sample = Vec::new();
+        sample.extend(lp_nal(4, 2, 30)); // data partition: 4+1+30 = 35 clear
+        sample.extend(lp_nal(4, 5, 100)); // IDR: nal_len 101 > 48
+        let plan = plan(&sample, 4).unwrap();
+        // clear = 35 + prefix(4) + 32 = 71, encrypted = 69
+        assert_eq!(
+            plan,
+            vec![Subsample {
+                clear: 71,
+                encrypted: 69
             }]
         );
     }
@@ -151,16 +212,16 @@ mod tests {
     #[test]
     fn trailing_non_vcl_is_clear_only() {
         let mut sample = Vec::new();
-        sample.extend(lp_nal(4, 1, 20)); // VCL
-        sample.extend(lp_nal(4, 6, 8)); //  SEI trailing
+        sample.extend(lp_nal(4, 1, 60)); // VCL: nal_len 61 > 48
+        sample.extend(lp_nal(4, 6, 8)); //  SEI trailing: 4+1+8 = 13 clear
         let plan = plan(&sample, 4).unwrap();
         assert_eq!(
             plan,
             vec![
                 Subsample {
-                    clear: 5,
-                    encrypted: 20
-                },
+                    clear: 36, // prefix(4) + 32-byte leader
+                    encrypted: 29
+                }, // 61 - 32
                 Subsample {
                     clear: 13,
                     encrypted: 0
@@ -182,8 +243,8 @@ mod tests {
         let huge = u16::MAX as usize + 10; // SEI body
         let mut sample = Vec::new();
         sample.extend(lp_nal(4, 6, huge)); // clear = 4 + 1 + 65545 = 65550
-        sample.extend(lp_nal(4, 5, 16)); //  IDR: clear prefix 5, enc 16
-        // total clear = 65550 + 5 = 65555 > 65535 → split
+        sample.extend(lp_nal(4, 5, 60)); //  IDR: nal_len 61 > 48
+        // total clear = 65550 + prefix(4) + 32 = 65586 > 65535 → split
         let plan = plan(&sample, 4).unwrap();
         assert_eq!(
             plan,
@@ -193,9 +254,9 @@ mod tests {
                     encrypted: 0
                 },
                 Subsample {
-                    clear: 65555 - 65535,
-                    encrypted: 16
-                },
+                    clear: 65586 - 65535,
+                    encrypted: 29
+                }, // 51, 61 - 32
             ]
         );
     }
