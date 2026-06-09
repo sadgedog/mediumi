@@ -123,7 +123,7 @@ impl Encrypter {
         segment::enc_init_segment(self, init_bytes, out)
     }
 
-    /// Encrypt a media segment (return Vec<u8>)
+    /// Encrypt an init segment, returning the result as an owned buffer.
     pub fn enc_init_segment_to_vec(&self, init_bytes: &[u8]) -> Result<Vec<u8>, Error> {
         let mut buf = Vec::new();
         self.enc_init_segment(init_bytes, &mut buf)?;
@@ -140,7 +140,7 @@ impl Encrypter {
         segment::enc_media_segment(self, init_bytes, media_bytes, out)
     }
 
-    /// Encrypt a segment (return Vec<u8>)
+    /// Encrypt a media segment, returning the result as an owned buffer.
     pub fn enc_media_segment_to_vec(
         &mut self,
         init_bytes: &[u8],
