@@ -27,13 +27,21 @@
 //!
 //! ```no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use mediumi_crypto::{Encrypter, Iv, Mode};
+//! use mediumi_crypto::{Encrypter, Iv, Mode, PsshInput};
 //!
 //! const KEY_ID: [u8; 16] = [0x11; 16];
 //! const KEY: [u8; 16] = [0x33; 16];
+//! const SPECIFIC_DRM_SYSTEM_ID: [u8; 16] = [0xab; 16];
 //!
 //! // One Encrypter per track; reuse it across every segment (IV uniqueness).
 //! let mut enc = Encrypter::new(Mode::Cenc { iv: Iv::Bytes16([0; 16]) }, KEY_ID, KEY);
+//!
+//! // Attach a pssh
+//! enc.add_pssh(PsshInput {
+//!     system_id: SPECIFIC_DRM_SYSTEM_ID,
+//!     key_ids: vec![KEY_ID],
+//!     data: b"<drm-specific-pssh-data>".to_vec(),
+//! });
 //!
 //! // init segment
 //! let init = std::fs::read("init.m4s")?;
@@ -54,12 +62,20 @@
 //!
 //! ```no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use mediumi_crypto::{Encrypter, Iv, Mode};
+//! use mediumi_crypto::{Encrypter, Iv, Mode, PsshInput};
 //! # const KEY_ID: [u8; 16] = [0x11; 16];
 //! # const KEY: [u8; 16] = [0x33; 16];
+//! # const SPECIFIC_DRM_SYSTEM_ID: [u8; 16] = [0xab; 16];
 //! // cbcs carries a constant IV in tenc (shared by every sample).
 //! const CONSTANT_IV: [u8; 16] = [0x00; 16];
 //! let mut enc = Encrypter::new(Mode::Cbcs { iv: Iv::Bytes16(CONSTANT_IV) }, KEY_ID, KEY);
+//!
+//! // Attach a pssh
+//! enc.add_pssh(PsshInput {
+//!     system_id: SPECIFIC_DRM_SYSTEM_ID,
+//!     key_ids: vec![KEY_ID],
+//!     data: b"<drm-specific-pssh-data>".to_vec(),
+//! });
 //!
 //! let init = std::fs::read("init.m4s")?;
 //! let enc_init = enc.enc_init_segment_to_vec(&init)?;
