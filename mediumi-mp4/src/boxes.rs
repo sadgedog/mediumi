@@ -198,11 +198,10 @@ fn write_child_box<F: FnOnce(&mut ByteWriter)>(
     box_type: BoxType,
     body_fn: F,
 ) {
-    // Write the header with a placeholder size and the body directly into `out`,
-    // then backpatch the size once the body length is known. This avoids a
-    // per-box intermediate buffer (and copy) at every level of box nesting.
+    // Write the header with a placeholder size and the body directly into
+    // `out`, then backpatch the size once the body length is known.
     let start = out.position();
-    out.write_u32(0); // size placeholder
+    out.write_u32(0); // dummy box size
     let type_bytes: [u8; 4] = (&box_type).into();
     out.write_bytes(&type_bytes);
 

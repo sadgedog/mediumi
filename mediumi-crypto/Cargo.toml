@@ -17,6 +17,3 @@ mediumi-h264 = { path = "../mediumi-h264" }
 aes = "0.9"
 ctr = "0.10"
 cbc = "0.2"
-
-[dev-dependencies]
-criterion = "0.5"

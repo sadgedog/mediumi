@@ -1,14 +1,4 @@
 //! Byte-oriented reader and writer for mp4 box (de)serialization.
-//!
-//! mp4 boxes are overwhelmingly byte-aligned, so the primary API works in whole
-//! big-endian integers and byte slices (`read_u32` / `write_bytes` / …), backed
-//! by a plain cursor and `Vec<u8>` — no per-bit work.
-//!
-//! A few boxes pack sub-byte fields (e.g. `mdhd` language, `sdtp`, `avcC`). For
-//! those, [`ByteReader::read_bits`] / [`ByteWriter::write_bits`] keep the legacy
-//! bit-level behaviour. They take a byte-aligned fast path whenever the request
-//! is a whole number of bytes on a byte boundary, so the common case never pays
-//! for the bit loop.
 
 use crate::util::error::Error;
 
@@ -132,7 +122,6 @@ pub struct ByteWriter {
 }
 
 impl ByteWriter {
-    /// Create a new empty writer
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
@@ -141,7 +130,6 @@ impl ByteWriter {
         }
     }
 
-    /// Create a writer with a pre-reserved capacity.
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             data: Vec::with_capacity(cap),
@@ -150,7 +138,6 @@ impl ByteWriter {
         }
     }
 
-    /// Append raw bytes. Requires byte alignment (`bit_offset == 0`).
     pub fn write_bytes(&mut self, bytes: &[u8]) {
         debug_assert_eq!(self.bit_offset, 0, "write_bytes on a non-byte boundary");
         self.data.extend_from_slice(bytes);
@@ -173,7 +160,6 @@ impl ByteWriter {
         self.write_bytes(&v.to_be_bytes());
     }
 
-    /// Current byte length written so far. Valid only on a byte boundary.
     pub fn position(&self) -> usize {
         debug_assert_eq!(self.bit_offset, 0);
         self.data.len()
@@ -217,7 +203,6 @@ impl ByteWriter {
         }
     }
 
-    /// Write a single bit from a boolean
     pub fn write_bool(&mut self, value: bool) {
         self.write_bits(value as u32, 1);
     }
