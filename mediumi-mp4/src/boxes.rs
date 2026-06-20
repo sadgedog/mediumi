@@ -198,29 +198,25 @@ fn write_child_box<F: FnOnce(&mut ByteWriter)>(
     box_type: BoxType,
     body_fn: F,
 ) {
-    let mut body_writer = ByteWriter::new();
-    body_fn(&mut body_writer);
-    let body = body_writer.finish();
+    // Write the header with a placeholder size and the body directly into `out`,
+    // then backpatch the size once the body length is known. This avoids a
+    // per-box intermediate buffer (and copy) at every level of box nesting.
+    let start = out.position();
+    out.write_u32(0); // size placeholder
+    let type_bytes: [u8; 4] = (&box_type).into();
+    out.write_bytes(&type_bytes);
 
-    let body_len = body.len() as u64;
-    let normal_total = 8_u64 + body_len;
-    let header = if normal_total <= u32::MAX as u64 {
-        BoxHeader {
-            box_size: BoxSize::Normal(normal_total as u32),
-            box_type,
-            usertype: None,
-            header_size: 8,
-        }
+    body_fn(out);
+
+    let total = out.position() - start;
+    if total <= u32::MAX as usize {
+        out.patch_u32(start, total as u32);
     } else {
-        BoxHeader {
-            box_size: BoxSize::Large(16 + body_len),
-            box_type,
-            usertype: None,
-            header_size: 16,
-        }
-    };
-    header.to_bytes(out);
-    out.write_bytes(&body);
+        // Promote to a 64-bit largesize header: size field = 1, 8-byte largesize
+        // inserted after the type. The box grows by 8 bytes.
+        out.patch_u32(start, 1);
+        out.insert_bytes(start + 8, &(total as u64 + 8).to_be_bytes());
+    }
 }
 
 /// Unknown box
@@ -299,74 +295,78 @@ pub enum Mp4Box {
 impl Mp4Box {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut writer = ByteWriter::new();
+        self.write_into(&mut writer);
+        writer.finish()
+    }
+
+    pub fn write_into(&self, writer: &mut ByteWriter) {
         match self {
-            Mp4Box::Ftyp(b) => b.write_box(&mut writer),
-            Mp4Box::Mdat(b) => b.write_box(&mut writer),
-            Mp4Box::Moov(b) => b.write_box(&mut writer),
-            Mp4Box::Mvhd(b) => b.write_box(&mut writer),
-            Mp4Box::Trak(b) => b.write_box(&mut writer),
-            Mp4Box::Tkhd(b) => b.write_box(&mut writer),
-            Mp4Box::Tref(b) => b.write_box(&mut writer),
-            Mp4Box::Trgr(b) => b.write_box(&mut writer),
-            Mp4Box::Mdia(b) => b.write_box(&mut writer),
-            Mp4Box::Mdhd(b) => b.write_box(&mut writer),
-            Mp4Box::Hdlr(b) => b.write_box(&mut writer),
-            Mp4Box::Minf(b) => b.write_box(&mut writer),
-            Mp4Box::Nmhd(b) => b.write_box(&mut writer),
-            Mp4Box::Elng(b) => b.write_box(&mut writer),
-            Mp4Box::Stbl(b) => b.write_box(&mut writer),
-            Mp4Box::Stsd(b) => b.write_box(&mut writer),
-            Mp4Box::Stts(b) => b.write_box(&mut writer),
-            Mp4Box::Ctts(b) => b.write_box(&mut writer),
-            Mp4Box::Cslg(b) => b.write_box(&mut writer),
-            Mp4Box::Stss(b) => b.write_box(&mut writer),
-            Mp4Box::Stsh(b) => b.write_box(&mut writer),
-            Mp4Box::Edts(b) => b.write_box(&mut writer),
-            Mp4Box::Sdtp(b) => b.write_box(&mut writer),
-            Mp4Box::Elst(b) => b.write_box(&mut writer),
-            Mp4Box::Dinf(b) => b.write_box(&mut writer),
-            Mp4Box::Dref(b) => b.write_box(&mut writer),
-            Mp4Box::Stsz(b) => b.write_box(&mut writer),
-            Mp4Box::Stz2(b) => b.write_box(&mut writer),
-            Mp4Box::Stsc(b) => b.write_box(&mut writer),
-            Mp4Box::Stco(b) => b.write_box(&mut writer),
-            Mp4Box::Co64(b) => b.write_box(&mut writer),
-            Mp4Box::Padb(b) => b.write_box(&mut writer),
-            Mp4Box::Stdp(b) => b.write_box(&mut writer),
-            Mp4Box::Subs(b) => b.write_box(&mut writer),
-            Mp4Box::Saiz(b) => b.write_box(&mut writer),
-            Mp4Box::Saio(b) => b.write_box(&mut writer),
-            Mp4Box::Mvex(b) => b.write_box(&mut writer),
-            Mp4Box::Mehd(b) => b.write_box(&mut writer),
-            Mp4Box::Trex(b) => b.write_box(&mut writer),
-            Mp4Box::Moof(b) => b.write_box(&mut writer),
-            Mp4Box::Mfhd(b) => b.write_box(&mut writer),
-            Mp4Box::Traf(b) => b.write_box(&mut writer),
-            Mp4Box::Tfhd(b) => b.write_box(&mut writer),
-            Mp4Box::Trun(b) => b.write_box(&mut writer),
-            Mp4Box::Tfdt(b) => b.write_box(&mut writer),
-            Mp4Box::Leva(b) => b.write_box(&mut writer),
-            Mp4Box::Sbgp(b) => b.write_box(&mut writer),
-            Mp4Box::Sgpd(b) => b.write_box(&mut writer),
-            Mp4Box::Udta(b) => b.write_box(&mut writer),
-            Mp4Box::Meta(b) => b.write_box(&mut writer),
-            Mp4Box::Vmhd(b) => b.write_box(&mut writer),
-            Mp4Box::Smhd(b) => b.write_box(&mut writer),
-            Mp4Box::Hmhd(b) => b.write_box(&mut writer),
-            Mp4Box::Sthd(b) => b.write_box(&mut writer),
-            Mp4Box::Pssh(b) => b.write_box(&mut writer),
-            Mp4Box::Sinf(b) => b.write_box(&mut writer),
-            Mp4Box::Frma(b) => b.write_box(&mut writer),
-            Mp4Box::Schm(b) => b.write_box(&mut writer),
-            Mp4Box::Schi(b) => b.write_box(&mut writer),
-            Mp4Box::Tenc(b) => b.write_box(&mut writer),
-            Mp4Box::Senc(b) => b.write_box(&mut writer),
+            Mp4Box::Ftyp(b) => b.write_box(writer),
+            Mp4Box::Mdat(b) => b.write_box(writer),
+            Mp4Box::Moov(b) => b.write_box(writer),
+            Mp4Box::Mvhd(b) => b.write_box(writer),
+            Mp4Box::Trak(b) => b.write_box(writer),
+            Mp4Box::Tkhd(b) => b.write_box(writer),
+            Mp4Box::Tref(b) => b.write_box(writer),
+            Mp4Box::Trgr(b) => b.write_box(writer),
+            Mp4Box::Mdia(b) => b.write_box(writer),
+            Mp4Box::Mdhd(b) => b.write_box(writer),
+            Mp4Box::Hdlr(b) => b.write_box(writer),
+            Mp4Box::Minf(b) => b.write_box(writer),
+            Mp4Box::Nmhd(b) => b.write_box(writer),
+            Mp4Box::Elng(b) => b.write_box(writer),
+            Mp4Box::Stbl(b) => b.write_box(writer),
+            Mp4Box::Stsd(b) => b.write_box(writer),
+            Mp4Box::Stts(b) => b.write_box(writer),
+            Mp4Box::Ctts(b) => b.write_box(writer),
+            Mp4Box::Cslg(b) => b.write_box(writer),
+            Mp4Box::Stss(b) => b.write_box(writer),
+            Mp4Box::Stsh(b) => b.write_box(writer),
+            Mp4Box::Edts(b) => b.write_box(writer),
+            Mp4Box::Sdtp(b) => b.write_box(writer),
+            Mp4Box::Elst(b) => b.write_box(writer),
+            Mp4Box::Dinf(b) => b.write_box(writer),
+            Mp4Box::Dref(b) => b.write_box(writer),
+            Mp4Box::Stsz(b) => b.write_box(writer),
+            Mp4Box::Stz2(b) => b.write_box(writer),
+            Mp4Box::Stsc(b) => b.write_box(writer),
+            Mp4Box::Stco(b) => b.write_box(writer),
+            Mp4Box::Co64(b) => b.write_box(writer),
+            Mp4Box::Padb(b) => b.write_box(writer),
+            Mp4Box::Stdp(b) => b.write_box(writer),
+            Mp4Box::Subs(b) => b.write_box(writer),
+            Mp4Box::Saiz(b) => b.write_box(writer),
+            Mp4Box::Saio(b) => b.write_box(writer),
+            Mp4Box::Mvex(b) => b.write_box(writer),
+            Mp4Box::Mehd(b) => b.write_box(writer),
+            Mp4Box::Trex(b) => b.write_box(writer),
+            Mp4Box::Moof(b) => b.write_box(writer),
+            Mp4Box::Mfhd(b) => b.write_box(writer),
+            Mp4Box::Traf(b) => b.write_box(writer),
+            Mp4Box::Tfhd(b) => b.write_box(writer),
+            Mp4Box::Trun(b) => b.write_box(writer),
+            Mp4Box::Tfdt(b) => b.write_box(writer),
+            Mp4Box::Leva(b) => b.write_box(writer),
+            Mp4Box::Sbgp(b) => b.write_box(writer),
+            Mp4Box::Sgpd(b) => b.write_box(writer),
+            Mp4Box::Udta(b) => b.write_box(writer),
+            Mp4Box::Meta(b) => b.write_box(writer),
+            Mp4Box::Vmhd(b) => b.write_box(writer),
+            Mp4Box::Smhd(b) => b.write_box(writer),
+            Mp4Box::Hmhd(b) => b.write_box(writer),
+            Mp4Box::Sthd(b) => b.write_box(writer),
+            Mp4Box::Pssh(b) => b.write_box(writer),
+            Mp4Box::Sinf(b) => b.write_box(writer),
+            Mp4Box::Frma(b) => b.write_box(writer),
+            Mp4Box::Schm(b) => b.write_box(writer),
+            Mp4Box::Schi(b) => b.write_box(writer),
+            Mp4Box::Tenc(b) => b.write_box(writer),
+            Mp4Box::Senc(b) => b.write_box(writer),
             Mp4Box::Unknown(u) => {
-                u.header.to_bytes(&mut writer);
+                u.header.to_bytes(writer);
                 writer.write_bytes(&u.payload);
             }
         }
-        writer.finish()
     }
 
     pub fn parse(data: &[u8]) -> Result<(Self, usize), Error> {
@@ -494,9 +494,9 @@ pub fn parse_all(data: &[u8]) -> Result<Vec<Mp4Box>, Error> {
 
 /// Serialize all box
 pub fn to_bytes_all(boxes: &[Mp4Box]) -> Vec<u8> {
-    let mut out = Vec::new();
+    let mut writer = ByteWriter::new();
     for b in boxes {
-        out.extend_from_slice(&b.to_bytes());
+        b.write_into(&mut writer);
     }
-    out
+    writer.finish()
 }

@@ -173,6 +173,25 @@ impl ByteWriter {
         self.write_bytes(&v.to_be_bytes());
     }
 
+    /// Current byte length written so far. Valid only on a byte boundary.
+    pub fn position(&self) -> usize {
+        debug_assert_eq!(self.bit_offset, 0);
+        self.data.len()
+    }
+
+    /// Overwrite the 4 big-endian bytes at `offset` (used to backpatch a box
+    /// size field that was written as a placeholder before the body length was
+    /// known).
+    pub fn patch_u32(&mut self, offset: usize, value: u32) {
+        self.data[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+    }
+
+    /// Insert `bytes` at `offset`, shifting the tail right. Used only for the
+    /// rare promotion of a box header to a 64-bit largesize.
+    pub fn insert_bytes(&mut self, offset: usize, bytes: &[u8]) {
+        self.data.splice(offset..offset, bytes.iter().copied());
+    }
+
     /// Write `n` bits from a u32 value (MSB first).
     ///
     /// Byte-aligned whole-byte writes (the common case) push whole bytes; only
