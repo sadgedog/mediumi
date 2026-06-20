@@ -1,7 +1,7 @@
 use crate::{
     BaseBox, Error,
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 /// Records the codingname (box_type) of the unprotected sample entry that the
@@ -14,14 +14,14 @@ pub struct Frma {
 impl BaseBox for Frma {
     const BOX_TYPE: BoxType = BoxType::Frma;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for &b in &self.data_format {
             writer.write_bits(b as u32, 8);
         }
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let data_format: [u8; 4] = reader
             .read_slice(4)?
             .try_into()
@@ -39,7 +39,7 @@ mod tests {
         let frma = Frma {
             data_format: *b"avc1",
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         frma.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Frma::parse(&bytes).expect("failed to parse frma");

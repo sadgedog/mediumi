@@ -6,7 +6,7 @@ use crate::{
         subs::Subs,
     },
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ pub struct Stbl {
 impl BaseBox for Stbl {
     const BOX_TYPE: BoxType = BoxType::Stbl;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.stsd.write_box(writer);
         self.stts.write_box(writer);
         if let Some(ref b) = self.ctts {

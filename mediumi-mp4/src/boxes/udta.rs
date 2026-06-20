@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub struct Udta {
 impl BaseBox for Udta {
     const BOX_TYPE: BoxType = BoxType::Udta;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for raw in &self.others {
             for &b in raw {
                 writer.write_bits(b as u32, 8);

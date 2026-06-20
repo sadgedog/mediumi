@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader},
     types::{self, BoxType},
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 pub const UNITY_MATRIX: [u32; 9] = [0x0001_0000, 0, 0, 0, 0x0001_0000, 0, 0, 0, 0x4000_0000];
@@ -22,7 +22,7 @@ pub struct Mvhd {
 impl BaseBox for Mvhd {
     const BOX_TYPE: types::BoxType = BoxType::Mvhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
 
         if self.header.version == 1 {
@@ -58,7 +58,7 @@ impl BaseBox for Mvhd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, super::error::Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
 
         let (creation_time, modification_time, timescale, duration) = if header.version == 1 {
@@ -155,7 +155,7 @@ mod tests {
         src.modification_time = 0xDDEE_FF00;
         src.duration = 0xDEAD_BEEF;
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         // 4 (FullBox) + 16 (times32x4) + 4 (rate) + 2 (vol) + 2 + 8 (reserved) + 36 (matrix) + 24 (pre_defined) + 4 (next_id)
@@ -172,7 +172,7 @@ mod tests {
         assert_eq!(parsed.matrix, UNITY_MATRIX);
         assert_eq!(parsed.next_track_id, src.next_track_id);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -182,7 +182,7 @@ mod tests {
         // v1 keeps 64-bit creation/modification/duration
         let src = sample_mvhd(1);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         // 4 + 8+8+4+8 (times) + 4 + 2 + 2 + 8 + 36 + 24 + 4
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(parsed.matrix, UNITY_MATRIX);
         assert_eq!(parsed.next_track_id, 3);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

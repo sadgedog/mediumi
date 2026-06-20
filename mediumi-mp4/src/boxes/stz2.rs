@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ pub struct Stz2 {
 impl BaseBox for Stz2 {
     const BOX_TYPE: BoxType = BoxType::Stz2;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(0, 24); // reserved
         writer.write_bits(self.field_size as u32, 8);
@@ -30,7 +30,7 @@ impl BaseBox for Stz2 {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let _ = reader.read_bits(24)?; // reserved
         let field_size = reader.read_bits(8)? as u8;
@@ -78,7 +78,7 @@ mod tests {
             sample_count: 2,
             entry_sizes: vec![100, 200],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Stz2::parse(&bytes).expect("parse stz2");
@@ -96,7 +96,7 @@ mod tests {
             sample_count: 4,
             entry_sizes: vec![1, 2, 3, 4],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Stz2::parse(&bytes).expect("parse stz2");
@@ -114,12 +114,12 @@ mod tests {
             sample_count: 3,
             entry_sizes: vec![1, 2, 15],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Stz2::parse(&bytes).expect("parse stz2");
         assert_eq!(parsed.entry_sizes, vec![1, 2, 15]);
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_stz2_invalid_field_size_errors() {
         // Build raw bytes manually with field_size = 12 (reserved).
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         FullBoxHeader {
             version: 0,
             flags: 0,

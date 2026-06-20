@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, PartialEq)]
@@ -23,7 +23,7 @@ pub struct Ftyp {
 impl BaseBox for Ftyp {
     const BOX_TYPE: BoxType = BoxType::Ftyp;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for b in &self.major_brand.0 {
             writer.write_bits(*b as u32, 8);
         }
@@ -40,7 +40,7 @@ impl BaseBox for Ftyp {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let major_brand = Brand([
             reader.read_bits(8)? as u8,
             reader.read_bits(8)? as u8,
@@ -91,7 +91,7 @@ mod tests {
         ];
         let ftyp = Ftyp::parse(&data).expect("failed to parse ftyp");
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         ftyp.to_bytes(&mut writer);
         let output = writer.finish();
 

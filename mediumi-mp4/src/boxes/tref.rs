@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub struct Tref {
 impl BaseBox for Tref {
     const BOX_TYPE: BoxType = BoxType::Tref;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for r in &self.references {
             let total = 8u32 + 4 * r.track_ids.len() as u32;
             writer.write_bits(total, 32);
@@ -32,7 +32,7 @@ impl BaseBox for Tref {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let mut references = Vec::new();
         while reader.remaining_bits() >= 64 {
             let size = reader.read_bits(32)?;
@@ -106,7 +106,7 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         assert_eq!(bytes.len(), 88);
@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(&parsed.references[6].reference_type, b"subt");
         assert_eq!(parsed.references[6].track_ids, vec![8]);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

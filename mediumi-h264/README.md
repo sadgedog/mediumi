@@ -39,7 +39,7 @@ $ ffmpeg -y -f lavfi -i testsrc2=duration=3:size=1280x720:rate=30 \
 ### Parse (Annex.B)
 - Walk the NAL units of `test.h264` and dump per-NAL info.
 ```sh
-$ cargo run --example h264_parse
+$ cargo run --example annex_b_parse
 ```
 
 ### Roundtrip (Annex.B)

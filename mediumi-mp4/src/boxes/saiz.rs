@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct Saiz {
 impl BaseBox for Saiz {
     const BOX_TYPE: BoxType = BoxType::Saiz;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
 
         if self.header.flags & 0x01 != 0 {
@@ -40,7 +40,7 @@ impl BaseBox for Saiz {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
 
         let (aux_info_type, aux_info_type_parameter) = if header.flags & 0x01 != 0 {
@@ -105,7 +105,7 @@ mod tests {
         assert_eq!(saiz.sample_count, 3);
         assert!(saiz.sample_info_sizes.is_empty());
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         saiz.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

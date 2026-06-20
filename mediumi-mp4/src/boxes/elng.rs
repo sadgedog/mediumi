@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Elng {
 impl BaseBox for Elng {
     const BOX_TYPE: BoxType = BoxType::Elng;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         for &b in self.extended_language.as_bytes() {
             writer.write_bits(b as u32, 8);
@@ -22,7 +22,7 @@ impl BaseBox for Elng {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let mut bytes = Vec::new();
         loop {
@@ -62,7 +62,7 @@ mod tests {
             },
             extended_language: "en-US".to_string(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Elng::parse(&bytes).expect("parse elng");

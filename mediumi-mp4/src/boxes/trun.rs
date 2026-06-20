@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error, FullBox, FullBoxHeader},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 const DATA_OFFSET_PRESENT: u32 = 0x000001;
@@ -31,7 +31,7 @@ pub struct Trun {
 impl BaseBox for Trun {
     const BOX_TYPE: BoxType = BoxType::Trun;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.header.version as u32, 8);
         writer.write_bits(self.header.flags, 24);
         writer.write_bits(self.sample_count, 32);
@@ -62,7 +62,7 @@ impl BaseBox for Trun {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let sample_count = reader.read_bits(32)?;
 
@@ -152,7 +152,7 @@ mod tests {
         assert_eq!(trun.first_sample_flags, None);
         assert!(trun.samples.is_empty());
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         trun.to_bytes(&mut writer);
         assert_eq!(writer.finish(), data);
     }

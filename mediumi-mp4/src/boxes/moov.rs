@@ -4,7 +4,7 @@ use crate::{
         trak::Trak, udta::Udta,
     },
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub struct Moov {
 impl BaseBox for Moov {
     const BOX_TYPE: BoxType = BoxType::Moov;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.mvhd.write_box(writer);
         for t in &self.traks {
             t.write_box(writer);
@@ -132,12 +132,12 @@ mod tests {
             pssh: Vec::new(),
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         moov.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Moov::parse(&bytes).expect("parse moov");
         assert_eq!(parsed.mvhd.timescale, 1000);
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -165,12 +165,12 @@ mod tests {
             pssh: vec![pssh],
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         moov.to_bytes(&mut w);
         let bytes = w.finish();
 
         let parsed = Moov::parse(&bytes).expect("parse moov with pssh");
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

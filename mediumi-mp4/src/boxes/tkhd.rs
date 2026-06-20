@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct Tkhd {
 impl BaseBox for Tkhd {
     const BOX_TYPE: BoxType = BoxType::Tkhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
 
         if self.header.version == 1 {
@@ -56,7 +56,7 @@ impl BaseBox for Tkhd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
 
         let (creation_time, modification_time, track_id, duration) = if header.version == 1 {
@@ -146,7 +146,7 @@ mod tests {
             width: 1920 << 16,
             height: 1080 << 16,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         assert_eq!(bytes.len(), 84);
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(parsed.track_id, 1);
         assert_eq!(parsed.width, 1920 << 16);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -177,7 +177,7 @@ mod tests {
             width: 0,
             height: 0,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         assert_eq!(bytes.len(), 96);

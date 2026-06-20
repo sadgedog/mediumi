@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct Saio {
 impl BaseBox for Saio {
     const BOX_TYPE: BoxType = BoxType::Saio;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
 
         if self.header.flags & 1 != 0 {
@@ -43,7 +43,7 @@ impl BaseBox for Saio {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
 
         let (aux_info_type, aux_info_type_parameter) = if header.flags & 1 != 0 {
@@ -112,7 +112,7 @@ mod tests {
         assert_eq!(saio.entry_count, 3);
         assert_eq!(saio.offset, [256u64, 512, 768]);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         saio.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }
@@ -136,7 +136,7 @@ mod tests {
             [0x0000_0001_0000_0000u64, 0x0000_0002_DEAD_BEEFu64]
         );
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         saio.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

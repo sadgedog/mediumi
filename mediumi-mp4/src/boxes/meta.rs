@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, FullBox, FullBoxHeader, Mp4Box, error::Error, hdlr::Hdlr},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Meta {
 impl BaseBox for Meta {
     const BOX_TYPE: BoxType = BoxType::Meta;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         self.hdlr.write_box(writer);
         for raw in &self.others {
@@ -25,7 +25,7 @@ impl BaseBox for Meta {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
 
         let mut hdlr: Option<Hdlr> = None;
@@ -90,7 +90,7 @@ mod tests {
         assert_eq!(meta.hdlr.handler_type, u32::from_be_bytes(*b"pict"));
         assert!(meta.others.is_empty());
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         meta.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

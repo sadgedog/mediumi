@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ pub struct Elst {
 impl BaseBox for Elst {
     const BOX_TYPE: BoxType = BoxType::Elst;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
@@ -40,7 +40,7 @@ impl BaseBox for Elst {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)?;
         let mut entries = Vec::with_capacity(entry_count as usize);
@@ -96,13 +96,13 @@ mod tests {
                 media_rate_fraction: 0,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Elst::parse(&bytes).expect("parse elst");
         assert_eq!(parsed.entries.len(), 1);
         assert_eq!(parsed.entries[0].media_time, -1);
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

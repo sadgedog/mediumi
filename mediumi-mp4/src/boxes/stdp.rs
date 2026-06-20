@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Stdp {
 impl BaseBox for Stdp {
     const BOX_TYPE: BoxType = BoxType::Stdp;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         for &p in &self.priorities {
             writer.write_bits(p as u32, 16);
@@ -21,7 +21,7 @@ impl BaseBox for Stdp {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let mut priorities = Vec::new();
         while reader.remaining_bits() >= 16 {
@@ -53,7 +53,7 @@ mod tests {
             },
             priorities: vec![100, 200, 300],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Stdp::parse(&bytes).expect("parse stdp");

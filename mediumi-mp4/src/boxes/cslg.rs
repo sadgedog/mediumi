@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -17,9 +17,9 @@ pub struct Cslg {
 impl BaseBox for Cslg {
     const BOX_TYPE: BoxType = BoxType::Cslg;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
-        let write = |w: &mut BitstreamWriter, v: i64, version: u8| {
+        let write = |w: &mut ByteWriter, v: i64, version: u8| {
             if version == 1 {
                 w.write_bits((v >> 32) as u32, 32);
                 w.write_bits(v as u32, 32);
@@ -43,9 +43,9 @@ impl BaseBox for Cslg {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
-        let read = |r: &mut BitstreamReader, version: u8| -> Result<i64, Error> {
+        let read = |r: &mut ByteReader, version: u8| -> Result<i64, Error> {
             if version == 1 {
                 let high = (r.read_bits(32)? as i64) << 32;
                 let low = r.read_bits(32)? as i64;
@@ -96,7 +96,7 @@ mod tests {
             composition_start_time: 0,
             composition_end_time: 1000,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Cslg::parse(&bytes).expect("parse cslg");

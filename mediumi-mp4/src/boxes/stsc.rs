@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -20,7 +20,7 @@ pub struct Stsc {
 impl BaseBox for Stsc {
     const BOX_TYPE: BoxType = BoxType::Stsc;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
@@ -31,7 +31,7 @@ impl BaseBox for Stsc {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)?;
         let mut entries = Vec::with_capacity(entry_count as usize);
@@ -72,7 +72,7 @@ mod tests {
                 sample_description_index: 1,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Stsc::parse(&bytes).expect("parse stsc");

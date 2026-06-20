@@ -4,7 +4,7 @@ use crate::{
         tref::Tref, trgr::Trgr, udta::Udta,
     },
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct Trak {
 impl BaseBox for Trak {
     const BOX_TYPE: BoxType = BoxType::Trak;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.tkhd.write_box(writer);
         if let Some(ref b) = self.tref {
             b.write_box(writer);

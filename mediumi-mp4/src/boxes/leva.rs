@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ pub struct Leva {
 impl BaseBox for Leva {
     const BOX_TYPE: BoxType = BoxType::Leva;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.levels.len() as u32, 8);
         for lv in &self.levels {
@@ -79,7 +79,7 @@ impl BaseBox for Leva {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let level_count = reader.read_bits(8)?;
         let mut levels = Vec::with_capacity(level_count as usize);
@@ -155,7 +155,7 @@ mod tests {
                 },
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Leva::parse(&bytes).expect("parse leva");
@@ -165,7 +165,7 @@ mod tests {
             }
             _ => panic!("expected GroupingType"),
         }
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -186,7 +186,7 @@ mod tests {
                 },
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Leva::parse(&bytes).expect("parse leva");
@@ -200,7 +200,7 @@ mod tests {
             }
             _ => panic!("expected GroupingTypeParameter"),
         }
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -225,13 +225,13 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Leva::parse(&bytes).expect("parse leva");
         assert!(matches!(parsed.levels[0].assignment, Assignment::Type2));
         assert!(matches!(parsed.levels[1].assignment, Assignment::Type3));
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -251,7 +251,7 @@ mod tests {
                 },
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Leva::parse(&bytes).expect("parse leva");
@@ -261,7 +261,7 @@ mod tests {
             }
             _ => panic!("expected SubTrack"),
         }
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

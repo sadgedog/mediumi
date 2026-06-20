@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct Sbgp {
 impl BaseBox for Sbgp {
     const BOX_TYPE: BoxType = BoxType::Sbgp;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.grouping_type, 32);
         if let Some(v) = self.grouping_type_parameter {
@@ -31,7 +31,7 @@ impl BaseBox for Sbgp {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let grouping_type = reader.read_bits(32)?;
         let grouping_type_parameter = if header.version == 1 {
@@ -90,7 +90,7 @@ mod tests {
         assert_eq!(sbgp.sample_count, [5]);
         assert_eq!(sbgp.group_description_index, [1]);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         sbgp.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

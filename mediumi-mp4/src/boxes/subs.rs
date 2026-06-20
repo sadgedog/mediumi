@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub struct Subs {
 impl BaseBox for Subs {
     const BOX_TYPE: BoxType = BoxType::Subs;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entry_count, 32);
         for entry in &self.entries {
@@ -49,7 +49,7 @@ impl BaseBox for Subs {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)?;
 
@@ -146,7 +146,7 @@ mod tests {
         assert_eq!(e.subsamples[1].discardable, 1);
         assert_eq!(e.subsamples[1].codec_specific_parameters, 8);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         subs.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }
@@ -176,7 +176,7 @@ mod tests {
             0xDEADBEEF
         );
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         subs.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

@@ -7,7 +7,7 @@ use crate::encrypter::Encrypter;
 use crate::error::Error;
 use crate::{initial, media};
 use mediumi_mp4::types::BoxType;
-use mediumi_mp4::{BoxWalker, Mp4Box, demuxer};
+use mediumi_mp4::{BoxWalker, Mp4Box, demuxer, muxer};
 use std::io::Write;
 
 pub struct MediaSegmentParts<'a> {
@@ -23,20 +23,19 @@ pub(crate) fn enc_init_segment<W: Write>(
     init_bytes: &[u8],
     out: &mut W,
 ) -> Result<(), Error> {
-    let boxes = demuxer::demux(init_bytes)?;
+    let mut boxes = demuxer::demux(init_bytes)?;
     let mut found_moov = false;
-    for b in &boxes {
-        match b {
-            Mp4Box::Moov(_) => {
-                out.write_all(&initial::enc_init(enc, &b.to_bytes())?)?;
-                found_moov = true;
-            }
-            _ => out.write_all(&b.to_bytes())?,
+    for b in &mut boxes {
+        if let Mp4Box::Moov(moov) = b {
+            initial::enc_init_moov(enc, moov)?;
+            found_moov = true;
         }
     }
     if !found_moov {
         return Err(Error::NoMoov);
     }
+
+    out.write_all(&muxer::mux(&boxes))?;
     Ok(())
 }
 

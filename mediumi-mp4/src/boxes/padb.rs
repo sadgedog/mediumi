@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Padb {
 impl BaseBox for Padb {
     const BOX_TYPE: BoxType = BoxType::Padb;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.sample_count, 32);
         let pairs = self.sample_count.div_ceil(2);
@@ -31,7 +31,7 @@ impl BaseBox for Padb {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let sample_count = reader.read_bits(32)?;
         let pairs = sample_count.div_ceil(2);
@@ -77,7 +77,7 @@ mod tests {
             sample_count: 4,
             padding_bits: vec![1, 2, 3, 4],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Padb::parse(&bytes).expect("parse padb");

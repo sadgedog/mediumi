@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error, FullBox, FullBoxHeader},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -13,14 +13,14 @@ pub struct Mfhd {
 impl BaseBox for Mfhd {
     const BOX_TYPE: BoxType = BoxType::Mfhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.header.version as u32, 8);
         writer.write_bits(self.header.flags, 24);
         writer.write_bits(self.sequence_number, 32);
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let sequence_number = reader.read_bits(32)?;
         Ok(Self {
@@ -57,7 +57,7 @@ mod tests {
         assert_eq!(mfhd.header.flags, 0);
         assert_eq!(mfhd.sequence_number, 0x01020304);
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         mfhd.to_bytes(&mut writer);
         let output = writer.finish();
         assert_eq!(output, data);

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct Hmhd {
 impl BaseBox for Hmhd {
     const BOX_TYPE: BoxType = BoxType::Hmhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.max_pdu_size as u32, 16);
         writer.write_bits(self.avg_pdu_size as u32, 16);
@@ -26,7 +26,7 @@ impl BaseBox for Hmhd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let max_pdu_size = reader.read_bits(16)? as u16;
         let avg_pdu_size = reader.read_bits(16)? as u16;
@@ -68,7 +68,7 @@ mod tests {
             max_bitrate: 100_000,
             avg_bitrate: 80_000,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         assert_eq!(bytes.len(), 20);

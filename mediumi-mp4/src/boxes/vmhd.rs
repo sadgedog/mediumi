@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Vmhd {
 impl BaseBox for Vmhd {
     const BOX_TYPE: BoxType = BoxType::Vmhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.graphicsmode as u32, 16);
         for &c in &self.opcolor {
@@ -23,7 +23,7 @@ impl BaseBox for Vmhd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let graphicsmode = reader.read_bits(16)? as u16;
         let opcolor = [
@@ -62,7 +62,7 @@ mod tests {
             graphicsmode: 0,
             opcolor: [0, 0, 0],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         assert_eq!(bytes.len(), 12); // 4 (FullBox) + 2 + 6

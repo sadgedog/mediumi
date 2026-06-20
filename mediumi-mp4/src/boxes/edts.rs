@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, elst::Elst},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Edts {
 impl BaseBox for Edts {
     const BOX_TYPE: BoxType = BoxType::Edts;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         if let Some(ref e) = self.elst {
             e.write_box(writer);
         }
