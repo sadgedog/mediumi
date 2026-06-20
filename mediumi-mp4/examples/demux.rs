@@ -473,6 +473,64 @@ fn run(label: &str, path: &str) {
                     m.others.len()
                 );
             }
+            Mp4Box::Pssh(p) => {
+                println!(
+                    "[{}] type: 'pssh', version: {}, system_id: {:02x?}, key_ids: {}, data: {} bytes",
+                    i,
+                    p.header.version,
+                    p.system_id,
+                    p.key_ids.len(),
+                    p.data.len()
+                );
+            }
+            Mp4Box::Frma(f) => {
+                println!(
+                    "[{}] type: 'frma', data_format: '{}'",
+                    i,
+                    fourcc(&f.data_format)
+                );
+            }
+            Mp4Box::Schm(s) => {
+                println!(
+                    "[{}] type: 'schm', scheme_type: '{}', scheme_version: {:#010x}",
+                    i,
+                    fourcc(&s.scheme_type),
+                    s.scheme_version
+                );
+            }
+            Mp4Box::Tenc(t) => {
+                println!(
+                    "[{}] type: 'tenc', version: {}, is_protected: {}, per_sample_iv_size: {}, crypt:skip: {}:{}",
+                    i,
+                    t.header.version,
+                    t.default_is_protected,
+                    t.default_per_sample_iv_size,
+                    t.default_crypt_byte_block,
+                    t.default_skip_byte_block,
+                );
+            }
+            Mp4Box::Schi(s) => {
+                println!("[{}] type: 'schi', tenc: {}", i, s.tenc.is_some());
+            }
+            Mp4Box::Sinf(s) => {
+                println!(
+                    "[{}] type: 'sinf', frma: '{}', scheme_type: '{}', schi: {}",
+                    i,
+                    fourcc(&s.frma.data_format),
+                    fourcc(&s.schm.scheme_type),
+                    s.schi.is_some()
+                );
+            }
+            Mp4Box::Senc(s) => {
+                let iv_len = s.entries.first().map(|e| e.iv.len()).unwrap_or(0);
+                println!(
+                    "[{}] type: 'senc', entries: {}, iv_size: {}, use_subsamples: {}",
+                    i,
+                    s.entries.len(),
+                    iv_len,
+                    s.header.flags & 0x02 != 0,
+                );
+            }
             Mp4Box::Unknown(u) => {
                 let size_str = match u.header.box_size {
                     BoxSize::Normal(s) => format!("{}", s),

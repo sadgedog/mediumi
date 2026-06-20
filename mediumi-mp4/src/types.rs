@@ -71,6 +71,8 @@ pub enum BoxType {
     Frma,
     Schm,
     Schi,
+    Tenc,
+    Senc,
     Iinf,
     Xml,
     Bxml,
@@ -91,6 +93,7 @@ pub enum BoxType {
     Ssix,
     Prft,
     Uuid,
+    Pssh,
     Unknown([u8; 4]),
 }
 
@@ -168,6 +171,8 @@ impl From<[u8; 4]> for BoxType {
             b"frma" => BoxType::Frma,
             b"schm" => BoxType::Schm,
             b"schi" => BoxType::Schi,
+            b"tenc" => BoxType::Tenc,
+            b"senc" => BoxType::Senc,
             b"iinf" => BoxType::Iinf,
             b"xml " => BoxType::Xml,
             b"bxml" => BoxType::Bxml,
@@ -188,6 +193,7 @@ impl From<[u8; 4]> for BoxType {
             b"ssix" => BoxType::Ssix,
             b"prft" => BoxType::Prft,
             b"uuid" => BoxType::Uuid,
+            b"pssh" => BoxType::Pssh,
             _ => BoxType::Unknown(value),
         }
     }
@@ -267,6 +273,8 @@ impl From<&BoxType> for [u8; 4] {
             BoxType::Frma => *b"frma",
             BoxType::Schm => *b"schm",
             BoxType::Schi => *b"schi",
+            BoxType::Tenc => *b"tenc",
+            BoxType::Senc => *b"senc",
             BoxType::Iinf => *b"iinf",
             BoxType::Xml => *b"xml ",
             BoxType::Bxml => *b"bxml",
@@ -287,6 +295,7 @@ impl From<&BoxType> for [u8; 4] {
             BoxType::Ssix => *b"ssix",
             BoxType::Prft => *b"prft",
             BoxType::Uuid => *b"uuid",
+            BoxType::Pssh => *b"pssh",
             BoxType::Unknown(v) => *v,
         }
     }

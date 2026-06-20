@@ -16,6 +16,7 @@ mkdir -p "$ROOT_DIR/mediumi-ac3/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-h264/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-mpeg2ts/examples/data"
 mkdir -p "$ROOT_DIR/mediumi-mp4/examples/data"
+mkdir -p "$ROOT_DIR/mediumi-crypto/examples/data"
 mkdir -p "$ROOT_DIR/mediumi/examples/data"
 
 # AAC (ADTS)
@@ -72,6 +73,37 @@ echo "Generating test_init.m4s and test.m4s ..."
         test.mpd
     rm -f test.mpd
 )
+
+# MP4 (fragmented, non-fragmented for mediumi-crypto)
+gen_crypto_fmp4() {
+    local name="$1"; shift
+    echo "Generating crypto ${name}_init.m4s and ${name}_segment.m4s ..."
+    (
+        cd "$ROOT_DIR/mediumi-crypto/examples/data"
+        ffmpeg -y "$@" \
+            -f hls -hls_segment_type fmp4 -hls_time 10 -hls_list_size 0 \
+            -hls_fmp4_init_filename "${name}_init.m4s" \
+            -hls_segment_filename "${name}_segment_%d.m4s" \
+            "${name}.m3u8"
+        # The clip is shorter than hls_time, so exactly one segment is written.
+        mv "${name}_segment_0.m4s" "${name}_segment.m4s"
+        rm -f "${name}.m3u8"
+    )
+}
+
+gen_crypto_fmp4 h264 \
+    -f lavfi -i testsrc2=duration=2:size=640x360:rate=30 \
+    -pix_fmt yuv420p -c:v libx264 -profile:v main -preset medium -g 60
+
+gen_crypto_fmp4 aac \
+    -f lavfi -i sine=frequency=440:duration=2:sample_rate=44100 \
+    -c:a aac -ar 44100 -ac 2
+
+gen_crypto_fmp4 av \
+    -f lavfi -i testsrc2=duration=2:size=640x360:rate=30 \
+    -f lavfi -i sine=frequency=440:duration=2:sample_rate=44100 \
+    -pix_fmt yuv420p -c:v libx264 -profile:v main -preset medium -g 60 \
+    -c:a aac -ar 44100 -ac 2
 
 # Mirror the container fixtures used by mediumi (umbrella) integration examples.
 # `mediumi/examples/*.rs` consume mp4 + ts data alongside codec crates, so it needs

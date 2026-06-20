@@ -1,7 +1,7 @@
 use crate::{
     boxes::{
         BaseBox, BoxIter, Error, Mp4Box, meta::Meta, saio::Saio, saiz::Saiz, sbgp::Sbgp,
-        sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
+        senc::Senc, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
     },
     types::BoxType,
     util::bitstream::BitstreamWriter,
@@ -14,6 +14,7 @@ pub struct Traf {
     pub sbgps: Vec<Sbgp>,
     pub sgpds: Vec<Sgpd>,
     pub subs: Vec<Subs>,
+    pub sencs: Vec<Senc>,
     pub saizs: Vec<Saiz>,
     pub saios: Vec<Saio>,
     pub tfdt: Option<Tfdt>,
@@ -47,6 +48,9 @@ impl BaseBox for Traf {
         for saio in &self.saios {
             saio.write_box(writer);
         }
+        for senc in &self.sencs {
+            senc.write_box(writer);
+        }
         if let Some(ref meta) = self.meta {
             meta.write_box(writer);
         }
@@ -65,6 +69,7 @@ impl BaseBox for Traf {
         let mut sbgps = Vec::new();
         let mut sgpds = Vec::new();
         let mut subs = Vec::new();
+        let mut sencs = Vec::new();
         let mut saizs = Vec::new();
         let mut saios = Vec::new();
         let mut others: Vec<Vec<u8>> = Vec::new();
@@ -82,6 +87,7 @@ impl BaseBox for Traf {
                 Mp4Box::Sbgp(s) => sbgps.push(s),
                 Mp4Box::Sgpd(s) => sgpds.push(s),
                 Mp4Box::Subs(s) => subs.push(s),
+                Mp4Box::Senc(s) => sencs.push(s),
                 Mp4Box::Saiz(s) => saizs.push(s),
                 Mp4Box::Saio(s) => saios.push(s),
                 Mp4Box::Tfdt(t) => {
@@ -108,6 +114,7 @@ impl BaseBox for Traf {
             sbgps,
             sgpds,
             subs,
+            sencs,
             saizs,
             saios,
             tfdt,
@@ -161,6 +168,7 @@ mod tests {
             sbgps: Vec::new(),
             sgpds: Vec::new(),
             subs: Vec::new(),
+            sencs: Vec::new(),
             saizs: Vec::new(),
             saios: Vec::new(),
             meta: None,
@@ -189,5 +197,62 @@ mod tests {
         let mut w = BitstreamWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), bytes);
+    }
+
+    #[test]
+    fn test_traf_with_senc_roundtrip() {
+        use crate::boxes::senc::{SENC_FLAG_USE_SUBSAMPLES, Senc, SencEntry, SubsampleEntry};
+
+        let traf = Traf {
+            tfhd: Tfhd {
+                header: FullBoxHeader {
+                    version: 0,
+                    flags: 0,
+                },
+                track_id: 1,
+                base_data_offset: None,
+                sample_description_index: None,
+                default_sample_duration: None,
+                default_sample_size: None,
+                default_sample_flags: None,
+            },
+            tfdt: None,
+            truns: Vec::new(),
+            sbgps: Vec::new(),
+            sgpds: Vec::new(),
+            subs: Vec::new(),
+            sencs: vec![Senc {
+                header: FullBoxHeader {
+                    version: 0,
+                    flags: SENC_FLAG_USE_SUBSAMPLES,
+                },
+                entries: vec![SencEntry {
+                    iv: vec![0, 0, 0, 0, 0, 0, 0, 1],
+                    subsamples: Some(vec![SubsampleEntry {
+                        bytes_of_clear_data: 5,
+                        bytes_of_protected_data: 100,
+                    }]),
+                }],
+            }],
+            saizs: Vec::new(),
+            saios: Vec::new(),
+            meta: None,
+            others: Vec::new(),
+        };
+        let mut w = BitstreamWriter::new();
+        traf.to_bytes(&mut w);
+        let bytes = w.finish();
+
+        // senc is routed into the typed `sencs` field, not `others`
+        let parsed = Traf::parse(&bytes).expect("parse traf with senc");
+        assert_eq!(parsed.sencs.len(), 1);
+        assert_eq!(parsed.sencs[0].entries.len(), 1);
+        assert_eq!(parsed.sencs[0].entries[0].iv, vec![0, 0, 0, 0, 0, 0, 0, 1]);
+        assert!(parsed.others.is_empty());
+
+        // byte-exact roundtrip
+        let mut w2 = BitstreamWriter::new();
+        parsed.to_bytes(&mut w2);
+        assert_eq!(w2.finish(), bytes);
     }
 }

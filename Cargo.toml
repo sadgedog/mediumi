@@ -3,6 +3,7 @@ members = [
     "mediumi",
     "mediumi-aac",
     "mediumi-ac3",
+    "mediumi-crypto",
     "mediumi-h264",
     "mediumi-mp4",
     "mediumi-mpeg2ts",
