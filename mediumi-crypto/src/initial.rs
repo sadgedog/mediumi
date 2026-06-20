@@ -2,7 +2,7 @@ use crate::encrypter::{Encrypter, Mode};
 use crate::error::Error;
 use crate::subsample;
 use mediumi_mp4::boxes::{
-    FullBoxHeader, frma::Frma, schi::Schi, schm::Schm, sinf::Sinf, tenc::Tenc,
+    FullBoxHeader, frma::Frma, moov::Moov, schi::Schi, schm::Schm, sinf::Sinf, tenc::Tenc,
 };
 use mediumi_mp4::sample_entry::wrap_with_sinf;
 use mediumi_mp4::{Mp4Box, demuxer, muxer};
@@ -10,42 +10,45 @@ use mediumi_mp4::{Mp4Box, demuxer, muxer};
 pub(crate) fn enc_init(enc: &Encrypter, moov_bytes: &[u8]) -> Result<Vec<u8>, Error> {
     let mut boxes = demuxer::demux(moov_bytes)?;
     let mut found_moov = false;
-    let mut wrapped = 0usize;
-
     for b in &mut boxes {
-        let Mp4Box::Moov(moov) = b else { continue };
-        found_moov = true;
-
-        for trak in &mut moov.traks {
-            let Some(stbl) = trak.mdia.minf.stbl.as_mut() else {
-                continue;
-            };
-            let Some(entry) = stbl.stsd.entries.first_mut() else {
-                continue;
-            };
-            let original = entry.box_type;
-            if !subsample::is_encryptable(&original) {
-                continue;
-            }
-            let sinf = build_sinf(enc, original);
-            if wrap_with_sinf(entry, &sinf).is_some() {
-                wrapped += 1;
-            }
-        }
-
-        for input in &enc.pssh_inputs {
-            moov.pssh.push(input.to_pssh());
+        if let Mp4Box::Moov(moov) = b {
+            enc_init_moov(enc, moov)?;
+            found_moov = true;
         }
     }
-
     if !found_moov {
         return Err(Error::NoMoov);
     }
+    Ok(muxer::mux(&boxes))
+}
+
+pub(crate) fn enc_init_moov(enc: &Encrypter, moov: &mut Moov) -> Result<(), Error> {
+    let mut wrapped = 0usize;
+    for trak in &mut moov.traks {
+        let Some(stbl) = trak.mdia.minf.stbl.as_mut() else {
+            continue;
+        };
+        let Some(entry) = stbl.stsd.entries.first_mut() else {
+            continue;
+        };
+        let original = entry.box_type;
+        if !subsample::is_encryptable(&original) {
+            continue;
+        }
+        let sinf = build_sinf(enc, original);
+        if wrap_with_sinf(entry, &sinf).is_some() {
+            wrapped += 1;
+        }
+    }
+
+    for input in &enc.pssh_inputs {
+        moov.pssh.push(input.to_pssh());
+    }
+
     if wrapped == 0 {
         return Err(Error::NoEncryptableTrack);
     }
-
-    Ok(muxer::mux(&boxes))
+    Ok(())
 }
 
 fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
