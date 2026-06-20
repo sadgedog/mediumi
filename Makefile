@@ -7,6 +7,9 @@ build-aac:
 build-ac3:
 	cargo build -p mediumi-ac3
 
+build-crypto:
+	cargo build -p mediumi-crypto
+
 build-h264:
 	cargo build -p mediumi-h264
 
@@ -31,6 +34,9 @@ test-aac:
 test-ac3:
 	cargo test -p mediumi-ac3
 
+test-crypto:
+	cargo test -p mediumi-crypto
+
 test-h264:
 	cargo test -p mediumi-h264
 
@@ -45,4 +51,11 @@ test-roundtrip:
 		&& cargo run --example adts_roundtrip \
 		&& cargo run --example ac3_roundtrip \
 		&& cargo run --example h264_roundtrip \
+		&& ./script/cleanup_test_data.sh
+
+test-encrypt:
+	./script/prepare_test_data.sh \
+		&& cargo run --example encrypt_video \
+		&& cargo run --example encrypt_audio \
+		&& cargo run --example encrypt_muxed \
 		&& ./script/cleanup_test_data.sh

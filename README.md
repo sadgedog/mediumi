@@ -12,12 +12,16 @@ It provides the following features.
     - AAC (ADTS)
     - AC-3 (A/52)
     - H.264 (AVC)
+- Encrypter
+    - Common Encryption (CENC) for fmp4/cmaf: `cenc` (AES-128-CTR) and `cbcs` (AES-128-CBC, 1:9 pattern)
 
 ## Crates
 - mediumi-aac
     - AAC (ADTS) bitstream parser and serializer
 - mediumi-ac3
     - AC-3 (A/52) bitstream parser and serializer
+- mediumi-crypto
+    - Common Encryption (CENC) encrypter for fmp4/cmaf (H.264 video, AAC audio); `cenc` and `cbcs` schemes
 - mediumi-h264
     - H.264 (AVC) bitstream parser and serializer
 - mediumi-mpeg2ts
@@ -55,6 +59,8 @@ $ make test-mpeg2ts
     - ISO/IEC 14496-15 
 - MPEG2-TS
     - ISO/IEC 13818-1
+- CENC (Common Encryption)
+    - ISO/IEC 23001-7
 
 ## Status
 This project is under active development. APIs may change without notice.
