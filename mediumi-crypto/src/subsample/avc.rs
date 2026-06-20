@@ -85,7 +85,13 @@ pub fn plan(
     Ok(out)
 }
 
-/// Measure the slice-header byte length of a VCL NAL (the clear leader that　follows the NAL header byte).
+/// Slice headers are far smaller than this. Converting only a bounded prefix of
+/// the NAL body to RBSP avoids copying/scanning the entire (multi-KB) frame per
+/// sample just to read a few tens of header bytes.
+const SLICE_HEADER_SCAN_CAP: usize = 256;
+
+/// Measure the slice-header byte length of a VCL NAL (the clear leader that
+/// follows the NAL header byte).
 fn slice_header_len(
     nal_body: &[u8],
     nal_type: u8,
@@ -95,15 +101,25 @@ fn slice_header_len(
 ) -> Option<usize> {
     let sps = sps?;
     let pps = pps?;
-    // slice_header() is parsed over the RBSP (emulation-prevention bytes removed).
-    let rbsp = NalUnit::remove_emulation_prevention_bytes(nal_body);
-    let mut reader = BitstreamReader::new(&rbsp);
-    let nut = NalUnitType::from(nal_type);
-    SliceHeader::parse(&mut reader, sps, pps, nut, nal_ref_idc).ok()?;
-    // Bytes consumed by the slice header, rounded up to a byte boundary (slice
-    // data is byte-aligned; cabac_alignment bits round into this final byte).
-    let consumed_bits = rbsp.len() * 8 - reader.remaining_bits();
-    let sh_bytes_rbsp = consumed_bits.div_ceil(8);
+
+    let measure = |rbsp: &[u8]| -> Option<usize> {
+        let mut reader = BitstreamReader::new(rbsp);
+        let nut = NalUnitType::from(nal_type);
+        SliceHeader::parse(&mut reader, sps, pps, nut, nal_ref_idc).ok()?;
+        let consumed_bits = rbsp.len() * 8 - reader.remaining_bits();
+        Some(consumed_bits.div_ceil(8))
+    };
+
+    let cap = nal_body.len().min(SLICE_HEADER_SCAN_CAP);
+    let sh_bytes_rbsp = match measure(&NalUnit::remove_emulation_prevention_bytes(
+        &nal_body[..cap],
+    )) {
+        Some(n) => n,
+        None if cap < nal_body.len() => {
+            measure(&NalUnit::remove_emulation_prevention_bytes(nal_body))?
+        }
+        None => return None,
+    };
     // Convert the RBSP length back to a length in the original NAL bytes,
     // re-adding any emulation-prevention bytes inside the slice header.
     Some(rbsp_len_to_raw_len(nal_body, sh_bytes_rbsp))
