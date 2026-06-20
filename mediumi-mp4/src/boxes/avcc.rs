@@ -2,7 +2,7 @@
 
 use crate::{
     boxes::error::Error,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct Extension {
 
 impl AvccConfig {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         writer.write_bits(self.configuration_version as u32, 8);
         writer.write_bits(self.avc_profile_indication as u32, 8);
         writer.write_bits(self.profile_compatibility as u32, 8);
@@ -61,7 +61,7 @@ impl AvccConfig {
         if data.len() < 7 {
             return Err(Error::DataTooShort);
         }
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let configuration_version = reader.read_bits(8)? as u8;
         let avc_profile_indication = reader.read_bits(8)? as u8;
         let profile_compatibility = reader.read_bits(8)? as u8;
@@ -114,7 +114,7 @@ impl AvccConfig {
     }
 }
 
-fn write_nal_array(writer: &mut BitstreamWriter, nalus: &[Vec<u8>]) {
+fn write_nal_array(writer: &mut ByteWriter, nalus: &[Vec<u8>]) {
     for nal in nalus {
         writer.write_bits(nal.len() as u32, 16);
         for &b in nal {
@@ -123,7 +123,7 @@ fn write_nal_array(writer: &mut BitstreamWriter, nalus: &[Vec<u8>]) {
     }
 }
 
-fn read_nal_array(reader: &mut BitstreamReader, count: usize) -> Result<Vec<Vec<u8>>, Error> {
+fn read_nal_array(reader: &mut ByteReader, count: usize) -> Result<Vec<Vec<u8>>, Error> {
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {
         let len = reader.read_bits(16)? as usize;

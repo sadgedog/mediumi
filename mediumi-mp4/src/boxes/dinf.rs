@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, dref::Dref},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Dinf {
 impl BaseBox for Dinf {
     const BOX_TYPE: BoxType = BoxType::Dinf;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.dref.write_box(writer);
         for raw in &self.others {
             for &b in raw {

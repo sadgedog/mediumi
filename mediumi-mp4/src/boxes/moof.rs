@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, mfhd::Mfhd, traf::Traf},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Moof {
 impl BaseBox for Moof {
     const BOX_TYPE: BoxType = BoxType::Moof;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.mfhd.write_box(writer);
         for traf in &self.trafs {
             traf.write_box(writer);
@@ -108,7 +108,7 @@ mod tests {
             }],
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         moof.to_bytes(&mut w);
         w.finish()
     }
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(parsed.trafs[0].truns.len(), 1);
         assert!(parsed.others.is_empty());
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), bytes);
     }

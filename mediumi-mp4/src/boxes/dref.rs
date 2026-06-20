@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 pub const SELF_CONTAINED: u32 = 0x000001;
@@ -33,7 +33,7 @@ pub struct Dref {
 impl BaseBox for Dref {
     const BOX_TYPE: BoxType = BoxType::Dref;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
@@ -91,7 +91,7 @@ impl BaseBox for Dref {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)?;
         let mut entries = Vec::with_capacity(entry_count as usize);
@@ -168,7 +168,7 @@ impl FullBox for Dref {
     }
 }
 
-fn write_cstr(writer: &mut BitstreamWriter, s: &str) {
+fn write_cstr(writer: &mut ByteWriter, s: &str) {
     for &b in s.as_bytes() {
         writer.write_bits(b as u32, 8);
     }
@@ -209,7 +209,7 @@ mod tests {
                 location: None,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         // dref FullBox(4) + entry_count(4) + entry: size(4)+'url '(4)+ver/flags(4) = 20
@@ -224,7 +224,7 @@ mod tests {
             _ => panic!("expected url entry"),
         }
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -241,7 +241,7 @@ mod tests {
                 location: Some("file.mp4".to_string()),
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -254,7 +254,7 @@ mod tests {
             _ => panic!("expected url entry"),
         }
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -272,7 +272,7 @@ mod tests {
                 location: Some("http://example.com/x".to_string()),
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -290,7 +290,7 @@ mod tests {
             _ => panic!("expected urn entry"),
         }
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
@@ -318,14 +318,14 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
 
         let parsed = Dref::parse(&bytes).expect("parse dref");
         assert_eq!(parsed.entries.len(), 3);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

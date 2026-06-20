@@ -2,7 +2,7 @@ use crate::boxes::BaseBox;
 use crate::boxes::sinf::Sinf;
 use crate::boxes::stsd::{NestedBox, SampleEntry};
 use crate::boxes::trak::Trak;
-use crate::util::bitstream::BitstreamWriter;
+use crate::util::bytestream::ByteWriter;
 
 /// Walk `trak.mdia.minf.stbl.stsd.entries` and return the body bytes of the first
 /// nested box whose 4-byte type matches `config_fourcc`.
@@ -47,7 +47,7 @@ pub fn wrap_with_sinf(entry: &mut SampleEntry, sinf: &Sinf) -> Option<[u8; 4]> {
 
     // BaseBox::to_bytes writes the box BODY only (no size/box_type header).
     // The stsd serialiser wraps each NestedBox with its own size+type prefix.
-    let mut w = BitstreamWriter::new();
+    let mut w = ByteWriter::new();
     sinf.to_bytes(&mut w);
     entry.nested.push(NestedBox {
         box_type: *b"sinf",

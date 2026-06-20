@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct Ctts {
 impl BaseBox for Ctts {
     const BOX_TYPE: BoxType = BoxType::Ctts;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
@@ -29,7 +29,7 @@ impl BaseBox for Ctts {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)?;
         let mut entries = Vec::with_capacity(entry_count as usize);
@@ -71,7 +71,7 @@ mod tests {
                 sample_offset: -512,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Ctts::parse(&bytes).expect("parse ctts");

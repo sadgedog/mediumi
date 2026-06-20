@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct Trex {
 impl BaseBox for Trex {
     const BOX_TYPE: BoxType = BoxType::Trex;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.track_id, 32);
         writer.write_bits(self.default_sample_description_index, 32);
@@ -27,7 +27,7 @@ impl BaseBox for Trex {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         Ok(Self {
             header,
@@ -66,7 +66,7 @@ mod tests {
             default_sample_size: 0,
             default_sample_flags: 0x010_00000,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Trex::parse(&bytes).expect("parse trex");

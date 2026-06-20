@@ -75,13 +75,13 @@ use crate::{
         tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
     },
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 pub trait BaseBox: Sized {
     const BOX_TYPE: BoxType;
-    fn to_bytes(&self, writer: &mut BitstreamWriter);
-    fn write_box(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter);
+    fn write_box(&self, writer: &mut ByteWriter) {
         write_child_box(writer, Self::BOX_TYPE, |w| self.to_bytes(w));
     }
     fn parse(data: &[u8]) -> Result<Self, Error>;
@@ -108,7 +108,7 @@ pub struct BoxHeader {
 }
 
 impl BoxHeader {
-    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    pub fn to_bytes(&self, writer: &mut ByteWriter) {
         match self.box_size {
             BoxSize::Normal(s) => {
                 writer.write_bits(s, 32);
@@ -122,24 +122,19 @@ impl BoxHeader {
         }
 
         let type_bytes: [u8; 4] = (&self.box_type).into();
-        for b in &type_bytes {
-            writer.write_bits(*b as u32, 8);
-        }
+        writer.write_bytes(&type_bytes);
 
         if let BoxSize::Large(s) = self.box_size {
-            writer.write_bits((s >> 32) as u32, 32); // upper 32bits of largesize
-            writer.write_bits(s as u32, 32); // lower 32bits of largesize
+            writer.write_u64(s); // 64-bit largesize
         }
 
         if let Some(usertype) = &self.usertype {
-            for b in usertype {
-                writer.write_bits(*b as u32, 8);
-            }
+            writer.write_bytes(usertype);
         }
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let size = reader.read_bits(32)?;
         let box_type = BoxType::from([
             reader.read_bits(8)? as u8,
@@ -186,24 +181,24 @@ pub struct FullBoxHeader {
 }
 
 impl FullBoxHeader {
-    pub fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    pub fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.version as u32, 8);
         writer.write_bits(self.flags, 24);
     }
 
-    pub fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+    pub fn parse(reader: &mut ByteReader) -> Result<Self, Error> {
         let version = reader.read_bits(8)? as u8;
         let flags = reader.read_bits(24)?;
         Ok(Self { version, flags })
     }
 }
 
-fn write_child_box<F: FnOnce(&mut BitstreamWriter)>(
-    out: &mut BitstreamWriter,
+fn write_child_box<F: FnOnce(&mut ByteWriter)>(
+    out: &mut ByteWriter,
     box_type: BoxType,
     body_fn: F,
 ) {
-    let mut body_writer = BitstreamWriter::new();
+    let mut body_writer = ByteWriter::new();
     body_fn(&mut body_writer);
     let body = body_writer.finish();
 
@@ -225,9 +220,7 @@ fn write_child_box<F: FnOnce(&mut BitstreamWriter)>(
         }
     };
     header.to_bytes(out);
-    for &b in &body {
-        out.write_bits(b as u32, 8);
-    }
+    out.write_bytes(&body);
 }
 
 /// Unknown box
@@ -305,7 +298,7 @@ pub enum Mp4Box {
 
 impl Mp4Box {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         match self {
             Mp4Box::Ftyp(b) => b.write_box(&mut writer),
             Mp4Box::Mdat(b) => b.write_box(&mut writer),
@@ -370,9 +363,7 @@ impl Mp4Box {
             Mp4Box::Senc(b) => b.write_box(&mut writer),
             Mp4Box::Unknown(u) => {
                 u.header.to_bytes(&mut writer);
-                for &byte in &u.payload {
-                    writer.write_bits(byte as u32, 8);
-                }
+                writer.write_bytes(&u.payload);
             }
         }
         writer.finish()

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub struct Mdat {
 impl BaseBox for Mdat {
     const BOX_TYPE: BoxType = BoxType::Mdat;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for b in &self.payload {
             writer.write_bits(*b as u32, 8);
         }
@@ -35,7 +35,7 @@ mod tests {
         let mdat = Mdat::parse(&data).expect("failed to parse mdat");
         assert_eq!(mdat.payload, data);
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         mdat.to_bytes(&mut writer);
         let output = writer.finish();
         assert_eq!(output, data);

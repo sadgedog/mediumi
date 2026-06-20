@@ -4,7 +4,7 @@ use crate::{
         stbl::Stbl, sthd::Sthd, vmhd::Vmhd,
     },
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct Minf {
 impl BaseBox for Minf {
     const BOX_TYPE: BoxType = BoxType::Minf;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         if let Some(ref b) = self.vmhd {
             b.write_box(writer);
         }

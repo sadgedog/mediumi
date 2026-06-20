@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, tenc::Tenc},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 /// Scheme Information Box (`schi`)
@@ -15,7 +15,7 @@ pub struct Schi {
 impl BaseBox for Schi {
     const BOX_TYPE: BoxType = BoxType::Schi;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         if let Some(t) = &self.tenc {
             t.write_box(writer);
         }
@@ -69,7 +69,7 @@ mod tests {
             }),
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         schi.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Schi::parse(&bytes).expect("failed to parse schi");
@@ -83,7 +83,7 @@ mod tests {
             tenc: None,
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         schi.to_bytes(&mut w);
         let bytes = w.finish();
         assert!(bytes.is_empty());

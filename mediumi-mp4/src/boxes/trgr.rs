@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub struct Trgr {
 impl BaseBox for Trgr {
     const BOX_TYPE: BoxType = BoxType::Trgr;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for g in &self.groups {
             // size(4) + box_type(4) + version+flags(4) + track_group_id(4) + remaining
             let total = 16u32 + g.remaining.len() as u32;
@@ -37,7 +37,7 @@ impl BaseBox for Trgr {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let mut groups = Vec::new();
         while reader.remaining_bits() >= 64 {
             let size = reader.read_bits(32)?;
@@ -106,7 +106,7 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         // 16 + (16 + 4) = 36
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(parsed.groups[1].track_group_id, 7);
         assert_eq!(parsed.groups[1].remaining, vec![0xAA, 0xBB, 0xCC, 0xDD]);
 
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }

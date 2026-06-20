@@ -2,7 +2,7 @@ use crate::{
     BaseBox, Error, FullBox,
     boxes::FullBoxHeader,
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 /// Scheme Type Box (`schm`)
@@ -19,7 +19,7 @@ pub struct Schm {
 impl BaseBox for Schm {
     const BOX_TYPE: BoxType = BoxType::Schm;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         for &b in &self.scheme_type {
             writer.write_bits(b as u32, 8);
@@ -35,7 +35,7 @@ impl BaseBox for Schm {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let scheme_type: [u8; 4] = reader
             .read_slice(4)?
@@ -82,7 +82,7 @@ mod tests {
             scheme_version: 0x0001_0000,
             scheme_uri: None,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         schm.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Schm::parse(&bytes).expect("failed to parse schm");
@@ -100,7 +100,7 @@ mod tests {
             scheme_version: 0x0001_0000,
             scheme_uri: Some(b"https://example.com\0".to_vec()),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         schm.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Schm::parse(&bytes).expect("failed to parse schm");

@@ -2,7 +2,7 @@ use crate::{
     BaseBox, Error, FullBox,
     boxes::FullBoxHeader,
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 /// Track Encryption Box (`tenc`)
@@ -26,7 +26,7 @@ pub struct Tenc {
 impl BaseBox for Tenc {
     const BOX_TYPE: BoxType = BoxType::Tenc;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         // reserved
         writer.write_bits(0, 8);
@@ -54,7 +54,7 @@ impl BaseBox for Tenc {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let _reserved = reader.read_bits(8)?;
         let pattern_byte = reader.read_bits(8)? as u8;
@@ -120,7 +120,7 @@ mod tests {
             default_kid: KID,
             default_constant_iv: None,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         tenc.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Tenc::parse(&bytes).expect("failed to parse tenc v0");
@@ -141,7 +141,7 @@ mod tests {
             default_kid: KID,
             default_constant_iv: Some(vec![0xAA; 16]),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         tenc.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Tenc::parse(&bytes).expect("failed to parse tenc v1");

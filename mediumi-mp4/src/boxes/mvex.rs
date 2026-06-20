@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, leva::Leva, mehd::Mehd, trex::Trex},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ pub struct Mvex {
 impl BaseBox for Mvex {
     const BOX_TYPE: BoxType = BoxType::Mvex;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         if let Some(ref m) = self.mehd {
             m.write_box(writer);
         }

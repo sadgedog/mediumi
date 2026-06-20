@@ -2,7 +2,7 @@ use crate::{
     BaseBox, Error, FullBox,
     boxes::FullBoxHeader,
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, PartialEq)]
@@ -16,7 +16,7 @@ pub struct Pssh {
 impl BaseBox for Pssh {
     const BOX_TYPE: BoxType = BoxType::Pssh;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         for &b in &self.system_id {
             writer.write_bits(b as u32, 8);
@@ -36,7 +36,7 @@ impl BaseBox for Pssh {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let system_id: [u8; 16] = reader
             .read_slice(16)?
@@ -98,7 +98,7 @@ mod tests {
             data: vec![0xDE, 0xAD, 0xBE, 0xEF],
         };
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         pssh.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Pssh::parse(&bytes).expect("failed to parse pssh");

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Mehd {
 impl BaseBox for Mehd {
     const BOX_TYPE: BoxType = BoxType::Mehd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         if self.header.version == 1 {
             writer.write_bits((self.fragment_duration >> 32) as u32, 32);
@@ -24,7 +24,7 @@ impl BaseBox for Mehd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let fragment_duration = if header.version == 1 {
             let high = (reader.read_bits(32)? as u64) << 32;
@@ -62,7 +62,7 @@ mod tests {
             },
             fragment_duration: 12345,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Mehd::parse(&bytes).expect("parse mehd");

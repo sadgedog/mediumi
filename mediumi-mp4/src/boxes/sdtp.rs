@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,7 +21,7 @@ pub struct Sdtp {
 impl BaseBox for Sdtp {
     const BOX_TYPE: BoxType = BoxType::Sdtp;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         for e in &self.entries {
             writer.write_bits(e.is_leading as u32 & 0x3, 2);
@@ -32,7 +32,7 @@ impl BaseBox for Sdtp {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let mut entries = Vec::new();
         while reader.remaining_bits() >= 8 {
@@ -78,7 +78,7 @@ mod tests {
                 sample_has_redundancy: 0,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         src.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Sdtp::parse(&bytes).expect("parse sdtp");

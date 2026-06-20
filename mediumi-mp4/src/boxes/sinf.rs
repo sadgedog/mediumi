@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, frma::Frma, schi::Schi, schm::Schm},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 /// Protection Scheme Information Box (`sinf`)
@@ -17,7 +17,7 @@ pub struct Sinf {
 impl BaseBox for Sinf {
     const BOX_TYPE: BoxType = BoxType::Sinf;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.frma.write_box(writer);
         self.schm.write_box(writer);
         if let Some(schi) = &self.schi {
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn sinf_cenc_roundtrip() {
         let sinf = sample_sinf();
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         sinf.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Sinf::parse(&bytes).expect("failed to parse sinf");
@@ -130,7 +130,7 @@ mod tests {
             scheme_version: 0x0001_0000,
             scheme_uri: None,
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         schm.write_box(&mut w);
         let bytes = w.finish();
         let err = Sinf::parse(&bytes).unwrap_err();

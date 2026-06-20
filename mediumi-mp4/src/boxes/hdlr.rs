@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct Hdlr {
 impl BaseBox for Hdlr {
     const BOX_TYPE: BoxType = BoxType::Hdlr;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.pre_defined, 32);
         writer.write_bits(self.handler_type, 32);
@@ -30,7 +30,7 @@ impl BaseBox for Hdlr {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let pre_defined = reader.read_bits(32)?;
         let handler_type = reader.read_bits(32)?;
@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(hdlr.handler_type, u32::from_be_bytes(*b"vide"));
         assert_eq!(hdlr.name, "VideoHandler");
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         hdlr.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, elng::Elng, hdlr::Hdlr, mdhd::Mdhd, minf::Minf},
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct Mdia {
 impl BaseBox for Mdia {
     const BOX_TYPE: BoxType = BoxType::Mdia;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.mdhd.write_box(writer);
         self.hdlr.write_box(writer);
         self.minf.write_box(writer);

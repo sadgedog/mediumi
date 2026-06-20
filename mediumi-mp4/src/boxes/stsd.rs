@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -58,7 +58,7 @@ pub struct NestedBox {
 impl BaseBox for Stsd {
     const BOX_TYPE: BoxType = BoxType::Stsd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         for e in &self.entries {
@@ -67,7 +67,7 @@ impl BaseBox for Stsd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let entry_count = reader.read_bits(32)? as usize;
 
@@ -109,7 +109,7 @@ impl FullBox for Stsd {
 }
 
 impl SampleEntry {
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         // 8(box header) + 8(SampleEntry common) + ...
         let total_size =
             8 + 8 + self.kind_size() + self.nested.iter().map(|n| 8 + n.body.len()).sum::<usize>();
@@ -147,7 +147,7 @@ impl SampleEntry {
     }
 
     fn parse(box_type: [u8; 4], body: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(body);
+        let mut reader = ByteReader::new(body);
         // SampleEntry common: 6 reserved + 2 data_reference_index.
         let _reserved = reader.read_slice(6)?;
         let data_reference_index = reader.read_bits(16)? as u16;
@@ -196,7 +196,7 @@ impl SampleEntry {
     }
 }
 
-fn parse_nested_boxes(reader: &mut BitstreamReader) -> Result<Vec<NestedBox>, Error> {
+fn parse_nested_boxes(reader: &mut ByteReader) -> Result<Vec<NestedBox>, Error> {
     let mut nested = Vec::new();
     while reader.remaining_bits() >= 64 {
         // box header: size (32) + type (4)
@@ -218,7 +218,7 @@ fn parse_nested_boxes(reader: &mut BitstreamReader) -> Result<Vec<NestedBox>, Er
 }
 
 impl VisualSampleEntry {
-    fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+    fn parse(reader: &mut ByteReader) -> Result<Self, Error> {
         let pre_defined1 = reader.read_bits(16)? as u16;
         let _reserved = reader.read_bits(16)?; // reserved (= 0)
         for _ in 0..3 {
@@ -251,7 +251,7 @@ impl VisualSampleEntry {
         })
     }
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.pre_defined1 as u32, 16);
         writer.write_bits(0, 16); // reserved
         for _ in 0..3 {
@@ -279,7 +279,7 @@ impl VisualSampleEntry {
 }
 
 impl AudioSampleEntry {
-    fn parse(reader: &mut BitstreamReader) -> Result<Self, Error> {
+    fn parse(reader: &mut ByteReader) -> Result<Self, Error> {
         for _ in 0..2 {
             let _ = reader.read_bits(32)?; // reserved × 2 (= 0)
         }
@@ -296,7 +296,7 @@ impl AudioSampleEntry {
         })
     }
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         for _ in 0..2 {
             writer.write_bits(0, 32); // reserved × 2
         }
@@ -343,7 +343,7 @@ mod tests {
         }
         assert!(entry.nested.is_empty());
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);
     }
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(&entry.nested[0].box_type, b"avcC");
         assert_eq!(entry.nested[0].body, vec![0x01, 0x42, 0xC0, 0x1E]);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);
     }
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(entry.nested.len(), 1);
         assert_eq!(&entry.nested[0].box_type, b"esds");
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);
     }
@@ -490,7 +490,7 @@ mod tests {
             }),
             others: Vec::new(),
         };
-        let mut sinf_w = BitstreamWriter::new();
+        let mut sinf_w = ByteWriter::new();
         sinf.write_box(&mut sinf_w);
         let sinf_box = sinf_w.finish();
 
@@ -544,7 +544,7 @@ mod tests {
         assert_eq!(parsed_sinf, sinf);
 
         // stsd byte-exact roundtrip
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);
     }
@@ -588,7 +588,7 @@ mod tests {
             }),
             others: Vec::new(),
         };
-        let mut sinf_w = BitstreamWriter::new();
+        let mut sinf_w = ByteWriter::new();
         sinf.write_box(&mut sinf_w);
         let sinf_box = sinf_w.finish();
 
@@ -635,7 +635,7 @@ mod tests {
         assert_eq!(parsed_sinf, sinf);
 
         // stsd byte-exact roundtrip
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), stsd_body);
     }

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct Sgpd {
 impl BaseBox for Sgpd {
     const BOX_TYPE: BoxType = BoxType::Sgpd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.grouping_type, 32);
         if let Some(v) = self.default_length {
@@ -33,7 +33,7 @@ impl BaseBox for Sgpd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let grouping_type = reader.read_bits(32)?;
 
@@ -95,7 +95,7 @@ mod tests {
         assert_eq!(sgpd.entry_count, 1);
         assert_eq!(sgpd.entries, [0x00, 0x02]);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         sgpd.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(sgpd.entry_count, 1);
         assert_eq!(sgpd.entries.len(), 20);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         sgpd.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }
@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(sgpd.default_sample_description_index, Some(1));
         assert_eq!(sgpd.entries, [0x80]);
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         sgpd.to_bytes(&mut w);
         assert_eq!(w.finish(), data);
     }

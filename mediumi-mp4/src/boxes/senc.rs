@@ -2,7 +2,7 @@ use crate::{
     BaseBox, Error, FullBox,
     boxes::FullBoxHeader,
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 /// `senc` flag: each entry carries explicit subsample information.
@@ -43,7 +43,7 @@ impl Senc {
     /// Parse with a caller-supplied per-sample IV size (the spec-correct source
     /// is `tenc.default_per_sample_iv_size`).
     pub fn parse_with_iv_size(data: &[u8], per_sample_iv_size: u8) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let sample_count = reader.read_bits(32)? as usize;
         let use_subsamples = header.flags & SENC_FLAG_USE_SUBSAMPLES != 0;
@@ -75,7 +75,7 @@ impl Senc {
     /// Infer the per-sample IV size from the box length when no `tenc` context
     /// is available. See the struct docs for the strategy.
     fn infer_iv_size(data: &[u8]) -> Result<u8, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let sample_count = reader.read_bits(32)? as usize;
         let use_subsamples = header.flags & SENC_FLAG_USE_SUBSAMPLES != 0;
@@ -141,7 +141,7 @@ fn fits_with_subsamples(data: &[u8], sample_count: usize, iv_size: usize) -> boo
 impl BaseBox for Senc {
     const BOX_TYPE: BoxType = BoxType::Senc;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.header.to_bytes(writer);
         writer.write_bits(self.entries.len() as u32, 32);
         let use_subsamples = self.header.flags & SENC_FLAG_USE_SUBSAMPLES != 0;
@@ -200,7 +200,7 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         senc.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -220,7 +220,7 @@ mod tests {
                 subsamples: None,
             }],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         senc.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Senc::parse(&bytes).expect("parse (infer iv16)");
@@ -254,7 +254,7 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         senc.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -291,7 +291,7 @@ mod tests {
                 },
             ],
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         senc.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -307,7 +307,7 @@ mod tests {
             header: fbh(SENC_FLAG_USE_SUBSAMPLES),
             entries: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         senc.to_bytes(&mut w);
         let bytes = w.finish();
         let parsed = Senc::parse(&bytes).expect("parse empty");

@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error, FullBox, FullBoxHeader},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Tfdt {
 impl BaseBox for Tfdt {
     const BOX_TYPE: BoxType = BoxType::Tfdt;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.header.version as u32, 8);
         writer.write_bits(self.header.flags, 24);
         if self.header.version == 1 {
@@ -25,7 +25,7 @@ impl BaseBox for Tfdt {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let base_media_decode_time = if header.version == 1 {
             let high = reader.read_bits(32)? as u64;
@@ -68,7 +68,7 @@ mod tests {
         assert_eq!(tfdt.header.flags, 0);
         assert_eq!(tfdt.base_media_decode_time, 0x01020304);
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         tfdt.to_bytes(&mut writer);
         assert_eq!(writer.finish(), data);
     }
@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(tfdt.header.flags, 0);
         assert_eq!(tfdt.base_media_decode_time, 0x0000_0001_0203_0405);
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         tfdt.to_bytes(&mut writer);
         assert_eq!(writer.finish(), data);
     }

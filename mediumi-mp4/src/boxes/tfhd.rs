@@ -1,7 +1,7 @@
 use crate::{
     boxes::{BaseBox, Error, FullBox, FullBoxHeader},
     types::BoxType,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
+    util::bytestream::{ByteReader, ByteWriter},
 };
 
 const BASE_DATA_OFFSET_PRESENT: u32 = 0x000001;
@@ -24,7 +24,7 @@ pub struct Tfhd {
 impl BaseBox for Tfhd {
     const BOX_TYPE: BoxType = BoxType::Tfhd;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         writer.write_bits(self.header.version as u32, 8);
         writer.write_bits(self.header.flags, 24);
         writer.write_bits(self.track_id, 32);
@@ -47,7 +47,7 @@ impl BaseBox for Tfhd {
     }
 
     fn parse(data: &[u8]) -> Result<Self, Error> {
-        let mut reader = BitstreamReader::new(data);
+        let mut reader = ByteReader::new(data);
         let header = FullBoxHeader::parse(&mut reader)?;
         let track_id = reader.read_bits(32)?;
 
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(tfhd.default_sample_size, None);
         assert_eq!(tfhd.default_sample_flags, None);
 
-        let mut writer = BitstreamWriter::new();
+        let mut writer = ByteWriter::new();
         tfhd.to_bytes(&mut writer);
         assert_eq!(writer.finish(), data);
     }

@@ -4,7 +4,7 @@ use crate::{
         senc::Senc, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
     },
     types::BoxType,
-    util::bitstream::BitstreamWriter,
+    util::bytestream::ByteWriter,
 };
 
 #[derive(Debug)]
@@ -25,7 +25,7 @@ pub struct Traf {
 impl BaseBox for Traf {
     const BOX_TYPE: BoxType = BoxType::Traf;
 
-    fn to_bytes(&self, writer: &mut BitstreamWriter) {
+    fn to_bytes(&self, writer: &mut ByteWriter) {
         self.tfhd.write_box(writer);
         if let Some(ref tfdt) = self.tfdt {
             tfdt.write_box(writer);
@@ -174,7 +174,7 @@ mod tests {
             meta: None,
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         traf.to_bytes(&mut w);
         w.finish()
     }
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(parsed.truns[0].samples[0].sample_duration, Some(1024));
         assert!(parsed.others.is_empty());
 
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         parsed.to_bytes(&mut w);
         assert_eq!(w.finish(), bytes);
     }
@@ -239,7 +239,7 @@ mod tests {
             meta: None,
             others: Vec::new(),
         };
-        let mut w = BitstreamWriter::new();
+        let mut w = ByteWriter::new();
         traf.to_bytes(&mut w);
         let bytes = w.finish();
 
@@ -251,7 +251,7 @@ mod tests {
         assert!(parsed.others.is_empty());
 
         // byte-exact roundtrip
-        let mut w2 = BitstreamWriter::new();
+        let mut w2 = ByteWriter::new();
         parsed.to_bytes(&mut w2);
         assert_eq!(w2.finish(), bytes);
     }
