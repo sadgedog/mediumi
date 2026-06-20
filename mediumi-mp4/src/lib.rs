@@ -19,6 +19,7 @@ pub mod sample;
 pub mod sample_entry;
 pub mod types;
 pub mod util;
+pub mod walk;
 
 pub use boxes::avcc::{AvccConfig, Extension as AvccExtension};
 pub use boxes::error::Error;
@@ -28,6 +29,7 @@ pub use sample::{
     traf_samples, trak_sample_locations,
 };
 pub use sample_entry::find_codec_config;
+pub use walk::{BoxInfo, BoxWalker};
 
 pub mod demuxer {
     use crate::boxes::{Mp4Box, error::Error, parse_all};

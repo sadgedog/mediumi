@@ -58,7 +58,7 @@ impl Mode {
     }
 }
 
-/// Encrypts the init and media segments of one track under a single content key.
+/// Encrypts the init & media segments of one track under a single content key.
 ///
 /// Caution: for **cenc (AES-CTR)** every per-sample counter value must be unique under a given key.
 /// A repeated counter reuses the keystream and leaks plaintext via XOR (the "many-time pad" failure mode).

@@ -86,7 +86,6 @@
 //! # }
 //! ```
 
-mod box_walk;
 pub mod cbc;
 pub mod cenc;
 pub mod ctr;

@@ -46,7 +46,7 @@ pub fn apply_cenc_subsamples(
     Ok(())
 }
 
-/// Derive the 16-byte AES-CTR initial counter block for a sample, per
+/// Derive the 16-byte AES-CTR initial counter block.
 ///
 /// - **8-byte IV**: high 8 bytes = `base + sample_index`, low 8 bytes = 0 (the
 ///   block counter, which the cipher advances per 16-byte block).

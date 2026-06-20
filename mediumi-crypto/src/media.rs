@@ -1,4 +1,3 @@
-use crate::box_walk::next_box;
 use crate::cbc::{Aes128CbcPatternCipher, apply_cbcs_subsamples};
 use crate::cenc::{apply_cenc_subsamples, derive_per_sample_iv, encrypted_block_count};
 use crate::encrypter::{Encrypter, Iv, Mode};
@@ -13,7 +12,7 @@ use mediumi_mp4::boxes::{
     senc::{SENC_FLAG_USE_SUBSAMPLES, Senc},
     traf::Traf,
 };
-use mediumi_mp4::{BoxHeader, Mp4Box, demuxer, types::BoxType};
+use mediumi_mp4::{BoxWalker, Mp4Box, demuxer, types::BoxType};
 
 pub(crate) fn enc_media(
     enc: &mut Encrypter,
@@ -32,126 +31,124 @@ pub(crate) fn enc_media(
         .ok_or(Error::NoMoof)?;
 
     let mut trafs_with_senc: Vec<usize> = Vec::new();
-
     let mdat_payload_pos = moof_bytes.len() as u64 + mdat_header_size as u64;
 
-    {
-        let Mp4Box::Moof(moof) = &mut moof_boxes[moof_idx] else {
-            return Err(Error::NoMoof);
+    let Mp4Box::Moof(moof) = &mut moof_boxes[moof_idx] else {
+        return Err(Error::NoMoof);
+    };
+
+    for (traf_idx, traf) in moof.trafs.iter_mut().enumerate() {
+        let Some(codec) = tracks.get(&traf.tfhd.track_id) else {
+            continue;
         };
-        for (traf_idx, traf) in moof.trafs.iter_mut().enumerate() {
-            let Some(codec) = tracks.get(&traf.tfhd.track_id) else {
-                continue;
-            };
-            let ranges = sample_ranges(traf, mdat_payload_pos)?;
-            if ranges.is_empty() {
-                continue;
+        let ranges = sample_ranges(traf, mdat_payload_pos)?;
+        if ranges.is_empty() {
+            continue;
+        }
+
+        let iv = enc.mode.iv();
+        let cbcs = match enc.mode {
+            Mode::Cbcs { .. } => {
+                let (crypt_bb, skip_bb) = codec.cbcs_pattern();
+                Some((Aes128CbcPatternCipher::new(&enc.key), crypt_bb, skip_bb))
             }
+            Mode::Cenc { .. } => None,
+        };
 
-            let iv = enc.mode.iv();
-            let cbcs = match enc.mode {
-                Mode::Cbcs { .. } => {
-                    let (crypt_bb, skip_bb) = codec.cbcs_pattern();
-                    Some((Aes128CbcPatternCipher::new(&enc.key), crypt_bb, skip_bb))
-                }
-                Mode::Cenc { .. } => None,
-            };
+        // cbcs full-sample audio (Mp4a) is decryptable from the tenc constant
+        // IV alone, so it carries no senc/saiz/saio: encrypt in place but emit
+        // no auxiliary boxes. Everything else (all cenc, cbcs video) needs senc.
+        let emit_senc = !(cbcs.is_some() && matches!(codec, CodecKind::Mp4a));
 
-            // cbcs full-sample audio (Mp4a) is decryptable from the tenc constant
-            // IV alone, so it carries no senc/saiz/saio: encrypt in place but emit
-            // no auxiliary boxes. Everything else (all cenc, cbcs video) needs senc.
-            let emit_senc = !(cbcs.is_some() && matches!(codec, CodecKind::Mp4a));
+        let mut senc_entries = Vec::with_capacity(ranges.len());
+        let mut saiz_sizes = Vec::with_capacity(ranges.len());
+        let mut use_subsamples = false;
 
-            let mut senc_entries = Vec::with_capacity(ranges.len());
-            let mut saiz_sizes = Vec::with_capacity(ranges.len());
-            let mut use_subsamples = false;
-
-            for (offset, size) in &ranges {
-                let end = offset + size;
-                if end > mdat.len() {
-                    return Err(Error::SampleOutOfBounds {
-                        end,
-                        mdat_len: mdat.len(),
-                    });
-                }
-                let sample = &mut mdat[*offset..end];
-                let subs = subsample::plan(codec, sample)?;
-
-                let entry = match &cbcs {
-                    Some((cipher, crypt_bb, skip_bb)) => {
-                        apply_cbcs_subsamples(
-                            cipher,
-                            &iv.to_block16(),
-                            *crypt_bb,
-                            *skip_bb,
-                            &subs,
-                            sample,
-                        )?;
-                        build_senc_entry_cbcs(&subs)
-                    }
-                    None => {
-                        let iv16 =
-                            derive_per_sample_iv(&iv, enc.next_sample_index, enc.next_block_offset);
-                        apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
-                        if matches!(iv, Iv::Bytes16(_)) {
-                            enc.next_block_offset += encrypted_block_count(&subs, sample.len());
-                        }
-                        build_senc_entry_cenc(&iv, &iv16, &subs)
-                    }
-                };
-                enc.next_sample_index += 1;
-
-                if !emit_senc {
-                    continue;
-                }
-                if !subs.is_empty() {
-                    use_subsamples = true;
-                }
-                let entry_size = senc_entry_size(&entry);
-                if entry_size > u8::MAX as usize {
-                    return Err(Error::SencEntryTooLarge(entry_size));
-                }
-                saiz_sizes.push(entry_size as u8);
-                senc_entries.push(entry);
+        for (offset, size) in &ranges {
+            let end = offset + size;
+            if end > mdat.len() {
+                return Err(Error::SampleOutOfBounds {
+                    end,
+                    mdat_len: mdat.len(),
+                });
             }
+            let sample = &mut mdat[*offset..end];
+            let subs = subsample::plan(codec, sample)?;
+
+            let entry = match &cbcs {
+                Some((cipher, crypt_bb, skip_bb)) => {
+                    apply_cbcs_subsamples(
+                        cipher,
+                        &iv.to_block16(),
+                        *crypt_bb,
+                        *skip_bb,
+                        &subs,
+                        sample,
+                    )?;
+                    build_senc_entry_cbcs(&subs)
+                }
+                None => {
+                    let iv16 =
+                        derive_per_sample_iv(&iv, enc.next_sample_index, enc.next_block_offset);
+                    apply_cenc_subsamples(&enc.key, &iv16, &subs, sample)?;
+                    if matches!(iv, Iv::Bytes16(_)) {
+                        enc.next_block_offset += encrypted_block_count(&subs, sample.len());
+                    }
+                    build_senc_entry_cenc(&iv, &iv16, &subs)
+                }
+            };
+            enc.next_sample_index += 1;
 
             if !emit_senc {
-                continue; // cbcs audio: encrypted, no auxiliary boxes
+                continue;
             }
-
-            let sample_count = senc_entries.len() as u32;
-            let flags = if use_subsamples {
-                SENC_FLAG_USE_SUBSAMPLES
-            } else {
-                0
-            };
-            traf.sencs.push(Senc {
-                header: FullBoxHeader { version: 0, flags },
-                entries: senc_entries,
-            });
-            traf.saizs.push(Saiz {
-                header: FullBoxHeader {
-                    version: 0,
-                    flags: 0,
-                },
-                aux_info_type: None,
-                aux_info_type_parameter: None,
-                default_sample_info_size: 0,
-                sample_count,
-                sample_info_sizes: saiz_sizes,
-            });
-            traf.saios.push(Saio {
-                header: FullBoxHeader {
-                    version: 0,
-                    flags: 0,
-                },
-                aux_info_type: None,
-                aux_info_type_parameter: None,
-                entry_count: 1,
-                offset: vec![0], // placeholder, patched below
-            });
-            trafs_with_senc.push(traf_idx);
+            if !subs.is_empty() {
+                use_subsamples = true;
+            }
+            let entry_size = senc_entry_size(&entry);
+            if entry_size > u8::MAX as usize {
+                return Err(Error::SencEntryTooLarge(entry_size));
+            }
+            saiz_sizes.push(entry_size as u8);
+            senc_entries.push(entry);
         }
+
+        if !emit_senc {
+            continue; // cbcs audio: encrypted, no auxiliary boxes
+        }
+
+        let sample_count = senc_entries.len() as u32;
+        let flags = if use_subsamples {
+            SENC_FLAG_USE_SUBSAMPLES
+        } else {
+            0
+        };
+        traf.sencs.push(Senc {
+            header: FullBoxHeader { version: 0, flags },
+            entries: senc_entries,
+        });
+        traf.saizs.push(Saiz {
+            header: FullBoxHeader {
+                version: 0,
+                flags: 0,
+            },
+            aux_info_type: None,
+            aux_info_type_parameter: None,
+            default_sample_info_size: 0,
+            sample_count,
+            sample_info_sizes: saiz_sizes,
+        });
+        traf.saios.push(Saio {
+            header: FullBoxHeader {
+                version: 0,
+                flags: 0,
+            },
+            aux_info_type: None,
+            aux_info_type_parameter: None,
+            entry_count: 1,
+            offset: vec![0], // placeholder, patched below
+        });
+        trafs_with_senc.push(traf_idx);
     }
 
     if trafs_with_senc.is_empty() {
@@ -245,24 +242,20 @@ fn sample_ranges(traf: &Traf, mdat_payload_pos: u64) -> Result<Vec<(usize, usize
 /// moof → traf → senc
 fn scan_senc_box_offsets(buf: &[u8]) -> Vec<usize> {
     let mut out = Vec::new();
-    let Ok(moof_hdr) = BoxHeader::parse(buf) else {
+    // `buf` is a moof we just serialized, so its boxes are well-formed; treat any
+    // parse hiccup as end-of-walk (map_while) rather than threading an error out.
+    let Some(Ok(moof)) = BoxWalker::new(buf).next() else {
         return out;
     };
-    // moof's children → find each traf.
-    let mut offset = moof_hdr.header_size;
-    while let Some((header, total)) = next_box(buf, offset, buf.len()) {
-        if header.box_type == BoxType::Traf {
-            // this traf's children → find its senc.
-            let traf_end = offset + total;
-            let mut inner = offset + header.header_size;
-            while let Some((ih, itotal)) = next_box(buf, inner, traf_end) {
-                if ih.box_type == BoxType::Senc {
-                    out.push(inner);
-                }
-                inner += itotal;
+    for traf in BoxWalker::children(buf, &moof).map_while(Result::ok) {
+        if traf.box_type != BoxType::Traf {
+            continue;
+        }
+        for senc in BoxWalker::children(buf, &traf).map_while(Result::ok) {
+            if senc.box_type == BoxType::Senc {
+                out.push(senc.start_offset);
             }
         }
-        offset += total;
     }
     out
 }

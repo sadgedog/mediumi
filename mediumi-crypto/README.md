@@ -6,8 +6,8 @@ mediumi-crypto is a cryptography library that implements the **Common Encryption
 format content.
 
 Supported protection schemes:
-- `cenc` — AES-128-CTR, subsample encryption (no pattern)
-- `cbcs` — AES-128-CBC, subsample encryption (1:9 pattern)
+- `cenc` — AES-128-CTR, no pattern, per-sample IV
+- `cbcs` — AES-128-CBC, 1:9 crypt/skip pattern, constant IV
 
 ## Scope and limitations
 - Media encryption for fmp4/cmaf (AES-128-CTR / AES-128-CBC)

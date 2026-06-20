@@ -3,12 +3,11 @@
 //! - [`enc_init_segment`] encrypts a whole init segment.
 //! - [`enc_media_segment`] encrypts a whole media segment.
 
-use crate::box_walk::TopLevelBoxes;
 use crate::encrypter::Encrypter;
 use crate::error::Error;
 use crate::{initial, media};
 use mediumi_mp4::types::BoxType;
-use mediumi_mp4::{Mp4Box, demuxer};
+use mediumi_mp4::{BoxWalker, Mp4Box, demuxer};
 use std::io::Write;
 
 pub struct MediaSegmentParts<'a> {
@@ -60,9 +59,10 @@ pub(crate) fn enc_media_segment<W: Write>(
 }
 
 fn extract_moov(init: &[u8]) -> Result<&[u8], Error> {
-    for (header, start, total) in TopLevelBoxes::new(init) {
-        if header.box_type == BoxType::Moov {
-            return Ok(&init[start..start + total]);
+    for info in BoxWalker::new(init) {
+        let info = info?;
+        if info.box_type == BoxType::Moov {
+            return Ok(&init[info.start_offset..info.end_offset()]);
         }
     }
     Err(Error::NoMoov)
@@ -72,11 +72,12 @@ pub fn split_media_segment(segment: &mut [u8]) -> Result<MediaSegmentParts<'_>, 
     let mut moof: Option<(usize, usize)> = None; // (start, total len)
     let mut mdat: Option<(usize, usize, usize)> = None; // (start, header size, total len)
 
-    for (header, start, total) in TopLevelBoxes::new(segment) {
-        match header.box_type {
-            BoxType::Moof => moof = Some((start, total)),
+    for info in BoxWalker::new(segment) {
+        let info = info?;
+        match info.box_type {
+            BoxType::Moof => moof = Some((info.start_offset, info.total_size)),
             BoxType::Mdat if moof.is_some() => {
-                mdat = Some((start, header.header_size, total));
+                mdat = Some((info.start_offset, info.header_size, info.total_size));
                 break;
             }
             _ => {}

@@ -5,7 +5,7 @@ use mediumi_mp4::{Mp4Box, find_codec_config, iter_traks};
 use std::collections::HashMap;
 
 /// Build `track_id -> CodecKind` from the moov's traks. Tracks with an
-/// unsupported sample entry are skipped. AVC tracks carry their parsed SPS/PPS
+/// unsupported sample entry will be skipped. AVC tracks carry their parsed SPS/PPS
 /// (from avcC) so the subsample planner can measure slice-header lengths.
 pub(crate) fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, CodecKind>, Error> {
     let mut tracks = HashMap::new();
@@ -49,7 +49,7 @@ fn parse_avcc_sps_pps(avcc: &[u8]) -> (Option<Box<Sps>>, Option<Box<Pps>>) {
         if avcc.len() < 6 {
             return None;
         }
-        let num_sps = avcc[5] & 0x1f;
+        let num_sps = avcc[5] & 0b0001_1111;
         let mut p = 6usize;
         let mut sps: Option<Sps> = None;
         for _ in 0..num_sps {

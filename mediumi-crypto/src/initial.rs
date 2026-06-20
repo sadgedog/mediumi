@@ -68,7 +68,8 @@ fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
         ),
         // cbcs: AES-CBC, constant IV (8 or 16 bytes), codec-specific pattern → tenc version 1.
         Mode::Cbcs { iv } => {
-            let (crypt_bb, skip_bb) = cbcs_pattern(&original_box_type);
+            let (crypt_bb, skip_bb) = subsample::media_kind(&original_box_type)
+                .map_or((0, 0), |kind| kind.cbcs_pattern());
             (
                 *b"cbcs",
                 Tenc {
@@ -104,15 +105,5 @@ fn build_sinf(enc: &Encrypter, original_box_type: [u8; 4]) -> Sinf {
             others: Vec::new(),
         }),
         others: Vec::new(),
-    }
-}
-
-/// cbcs pattern `(crypt_byte_block, skip_byte_block)` for a sample-entry box_type.
-/// Video=1:9, audio=0:0
-fn cbcs_pattern(box_type: &[u8; 4]) -> (u8, u8) {
-    if subsample::ENCRYPTABLE_VIDEO.contains(box_type) {
-        (1, 9)
-    } else {
-        (0, 0)
     }
 }
