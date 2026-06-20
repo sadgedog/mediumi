@@ -50,7 +50,7 @@ test-roundtrip:
 	./script/prepare_test_data.sh \
 		&& cargo run --example adts_roundtrip \
 		&& cargo run --example ac3_roundtrip \
-		&& cargo run --example h264_roundtrip \
+		&& cargo run --example annex_b_roundtrip \
 		&& ./script/cleanup_test_data.sh
 
 test-encrypt:
