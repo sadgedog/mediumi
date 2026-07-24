@@ -3,7 +3,8 @@ pub mod mp4a;
 
 use crate::cenc::Subsample;
 use crate::error::Error;
-use mediumi_h264::{pps::Pps, sps::Sps};
+
+pub use avc::ParamSets;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MediaKind {
@@ -44,11 +45,9 @@ pub enum CodecKind {
     Mp4a,
     /// AVC / H.264 (`avc1` / `avc3`): length-prefixed NAL units.
     /// `length_size` is `avcC.length_size_minus_one + 1` (1, 2, or 4).
-    Avc {
-        length_size: u8,
-        sps: Option<Box<Sps>>,
-        pps: Option<Box<Pps>>,
-    },
+    /// `params` is seeded from `avcC` and updated by any in-band SPS/PPS while
+    /// planning a segment's samples.
+    Avc { length_size: u8, params: ParamSets },
 }
 
 impl CodecKind {
@@ -69,13 +68,16 @@ impl CodecKind {
 ///
 /// An **empty** result means "encrypt the whole sample with no subsamples" (audio).
 /// A **non-empty** result drives a subsample-style senc entry (video).
-pub fn plan(codec: &CodecKind, sample: &[u8]) -> Result<Vec<Subsample>, Error> {
+///
+/// Takes `&mut CodecKind` because AVC planning updates its [`ParamSets`] in place
+/// as in-band SPS/PPS NALs are encountered; samples of a segment must be planned
+/// in order so a later slice sees the parameter sets an earlier sample carried.
+pub fn plan(codec: &mut CodecKind, sample: &[u8]) -> Result<Vec<Subsample>, Error> {
     match codec {
         CodecKind::Mp4a => mp4a::plan(sample),
         CodecKind::Avc {
             length_size,
-            sps,
-            pps,
-        } => avc::plan(sample, *length_size, sps.as_deref(), pps.as_deref()),
+            params,
+        } => avc::plan(sample, *length_size, params),
     }
 }

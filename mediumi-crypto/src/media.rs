@@ -41,6 +41,10 @@ pub(crate) fn enc_media(
         let Some(codec) = tracks.get(&traf.tfhd.track_id) else {
             continue;
         };
+        // Work on a per-traf copy: the AVC planner mutates its ParamSets as it
+        // meets in-band SPS/PPS, and that state must carry across this traf's
+        // samples (but not leak into other tracks or the next segment).
+        let mut codec = codec.clone();
         let ranges = sample_ranges(traf, mdat_payload_pos)?;
         if ranges.is_empty() {
             continue;
@@ -73,7 +77,7 @@ pub(crate) fn enc_media(
                 });
             }
             let sample = &mut mdat[*offset..end];
-            let subs = subsample::plan(codec, sample)?;
+            let subs = subsample::plan(&mut codec, sample)?;
 
             let entry = match &cbcs {
                 Some((cipher, crypt_bb, skip_bb)) => {
