@@ -5,20 +5,81 @@ use mediumi_h264::pps::Pps;
 use mediumi_h264::slice_header::SliceHeader;
 use mediumi_h264::sps::Sps;
 use mediumi_h264::util::bitstream::BitstreamReader;
+use std::collections::HashMap;
 
 /// A VCL NAL whose protected (post-leader) slice data is
 /// this many bytes or fewer is left completely unencrypted.
 const MIN_ENCRYPTED_BYTES: usize = 16;
 
+/// NAL unit types carrying parameter sets.
+const NAL_SPS: u8 = 7;
+const NAL_PPS: u8 = 8;
+
 fn is_vcl(nal_type: u8) -> bool {
     matches!(nal_type, 1 | 5)
+}
+
+/// The SPS/PPS available while planning a track's samples.
+///
+/// A slice header references a PPS by `pic_parameter_set_id`, and that PPS in
+/// turn references an SPS by `seq_parameter_set_id`; both are needed to know how
+/// long the slice header (the clear leader) is. The maps are seeded from `avcC`
+/// and then updated in place as in-band SPS/PPS NALs (types 7/8) are encountered
+/// while walking a sample. In-band sets replace same-id `avcC` entries and
+/// persist across the samples of a segment, matching how `avc3`/CMAF streams
+/// carry their parameter sets in the bitstream rather than only in `avcC`.
+#[derive(Debug, Clone, Default)]
+pub struct ParamSets {
+    sps: HashMap<u32, Sps>, // keyed by seq_parameter_set_id
+    pps: HashMap<u32, Pps>, // keyed by pic_parameter_set_id
+}
+
+impl ParamSets {
+    /// Parse an SPS NAL body (the bytes after the NAL header byte) and store it,
+    /// silently ignoring a body that fails to parse.
+    pub fn ingest_sps(&mut self, nal_body: &[u8]) {
+        let rbsp = NalUnit::remove_emulation_prevention_bytes(nal_body);
+        if let Ok(sps) = Sps::parse(&rbsp) {
+            self.sps.insert(sps.seq_parameter_set_id as u32, sps);
+        }
+    }
+
+    /// Parse a PPS NAL body (the bytes after the NAL header byte) and store it.
+    /// A PPS references an SPS by `seq_parameter_set_id`; if that SPS is not yet
+    /// known (or the body fails to parse) the PPS is silently ignored.
+    pub fn ingest_pps(&mut self, nal_body: &[u8]) {
+        let rbsp = NalUnit::remove_emulation_prevention_bytes(nal_body);
+        let Some(seq_id) = pps_seq_parameter_set_id(&rbsp) else {
+            return;
+        };
+        let Some(sps) = self.sps.get(&seq_id) else {
+            return;
+        };
+        if let Ok(pps) = Pps::parse(&rbsp, sps) {
+            self.pps.insert(pps.pic_parameter_set_id, pps);
+        }
+    }
+
+    /// Resolve the (SPS, PPS) pair a slice references via `pic_parameter_set_id`.
+    fn select(&self, pps_id: u32) -> Option<(&Sps, &Pps)> {
+        let pps = self.pps.get(&pps_id)?;
+        let sps = self.sps.get(&pps.seq_parameter_set_id)?;
+        Some((sps, pps))
+    }
+}
+
+/// Read `seq_parameter_set_id` (the second `ue(v)` field) from a PPS RBSP so the
+/// referenced SPS can be looked up before the full PPS is parsed.
+fn pps_seq_parameter_set_id(rbsp: &[u8]) -> Option<u32> {
+    let mut reader = BitstreamReader::new(rbsp);
+    reader.read_ue().ok()?; // pic_parameter_set_id
+    reader.read_ue().ok() // seq_parameter_set_id
 }
 
 pub fn plan(
     sample: &[u8],
     length_size: u8,
-    sps: Option<&Sps>,
-    pps: Option<&Pps>,
+    params: &mut ParamSets,
 ) -> Result<Vec<Subsample>, Error> {
     if !matches!(length_size, 1 | 2 | 4) {
         return Err(Error::InvalidLengthSize(length_size));
@@ -49,16 +110,20 @@ pub fn plan(
         let header_byte = sample[prefix_end];
         let nal_type = header_byte & 0b0001_1111;
         let nal_ref_idc = (header_byte >> 5) & 0b11;
+        let nal_body = &sample[prefix_end + 1..nal_end];
+
+        // In-band parameter sets update the working set for this and later
+        // samples; they remain clear (handled by the non-VCL branch below).
+        match nal_type {
+            NAL_SPS => params.ingest_sps(nal_body),
+            NAL_PPS => params.ingest_pps(nal_body),
+            _ => {}
+        }
+
         if is_vcl(nal_type) {
             // clear leader = NAL header byte + slice header.
-            let sh = slice_header_len(
-                &sample[prefix_end + 1..nal_end],
-                nal_type,
-                nal_ref_idc,
-                sps,
-                pps,
-            )
-            .ok_or(Error::SliceHeaderParseFailed)?;
+            let sh = slice_header_len(nal_body, nal_type, nal_ref_idc, params)
+                .ok_or(Error::SliceHeaderParseFailed)?;
             let leader = 1 + sh; // NAL header byte + slice header bytes
             if nal_len <= leader + MIN_ENCRYPTED_BYTES {
                 // protected slice data ≤ 16 bytes → leave the whole NAL clear
@@ -91,18 +156,17 @@ pub fn plan(
 const SLICE_HEADER_SCAN_CAP: usize = 256;
 
 /// Measure the slice-header byte length of a VCL NAL (the clear leader that
-/// follows the NAL header byte).
+/// follows the NAL header byte). The SPS/PPS are selected from `params` via the
+/// slice's own `pic_parameter_set_id`, so an in-band PPS overriding the `avcC`
+/// one is honoured.
 fn slice_header_len(
     nal_body: &[u8],
     nal_type: u8,
     nal_ref_idc: u8,
-    sps: Option<&Sps>,
-    pps: Option<&Pps>,
+    params: &ParamSets,
 ) -> Option<usize> {
-    let sps = sps?;
-    let pps = pps?;
-
     let measure = |rbsp: &[u8]| -> Option<usize> {
+        let (sps, pps) = params.select(slice_pic_parameter_set_id(rbsp)?)?;
         let mut reader = BitstreamReader::new(rbsp);
         let nut = NalUnitType::from(nal_type);
         SliceHeader::parse(&mut reader, sps, pps, nut, nal_ref_idc).ok()?;
@@ -123,6 +187,15 @@ fn slice_header_len(
     // Convert the RBSP length back to a length in the original NAL bytes,
     // re-adding any emulation-prevention bytes inside the slice header.
     Some(rbsp_len_to_raw_len(nal_body, sh_bytes_rbsp))
+}
+
+/// Read `pic_parameter_set_id` (the third `ue(v)` field, after
+/// `first_mb_in_slice` and `slice_type`) from a slice-header RBSP.
+fn slice_pic_parameter_set_id(rbsp: &[u8]) -> Option<u32> {
+    let mut reader = BitstreamReader::new(rbsp);
+    reader.read_ue().ok()?; // first_mb_in_slice
+    reader.read_ue().ok()?; // slice_type
+    reader.read_ue().ok() // pic_parameter_set_id
 }
 
 /// Map a byte length measured in the RBSP (emulation-prevention bytes removed)
@@ -184,7 +257,7 @@ mod tests {
     #[test]
     fn invalid_length_size() {
         assert!(matches!(
-            plan(&[0u8; 4], 3, None, None),
+            plan(&[0u8; 4], 3, &mut ParamSets::default()),
             Err(Error::InvalidLengthSize(3))
         ));
     }
@@ -192,14 +265,15 @@ mod tests {
     #[test]
     fn non_vcl_only_is_fully_clear() {
         // SPS + PPS + SEI (all non-VCL) → entirely clear; no slice header needed,
-        // so SPS/PPS being None is fine.
+        // so an empty ParamSets is fine (the SPS/PPS here are junk bodies that
+        // fail to parse and are simply ignored).
         let mut sample = Vec::new();
         sample.extend(lp_nal(4, 7, 10)); // SPS: 4+1+10 = 15
         sample.extend(lp_nal(4, 8, 4)); //  PPS: 4+1+4  = 9
         sample.extend(lp_nal(4, 6, 8)); //  SEI: 4+1+8  = 13
         // total clear = 15 + 9 + 13 = 37
         assert_eq!(
-            plan(&sample, 4, None, None).unwrap(),
+            plan(&sample, 4, &mut ParamSets::default()).unwrap(),
             vec![Subsample {
                 clear: 37,
                 encrypted: 0
@@ -210,16 +284,16 @@ mod tests {
     #[test]
     fn truncated_and_zero_length() {
         assert!(matches!(
-            plan(&[0, 0], 4, None, None),
+            plan(&[0, 0], 4, &mut ParamSets::default()),
             Err(Error::TruncatedNal)
         ));
         assert!(matches!(
-            plan(&[0, 0, 0, 0], 4, None, None),
+            plan(&[0, 0, 0, 0], 4, &mut ParamSets::default()),
             Err(Error::ZeroLengthNal)
         ));
         let truncated = vec![0, 0, 0, 100, 0x65, 0xAA];
         assert!(matches!(
-            plan(&truncated, 4, None, None),
+            plan(&truncated, 4, &mut ParamSets::default()),
             Err(Error::TruncatedNal)
         ));
     }
@@ -229,7 +303,7 @@ mod tests {
         // A huge SEI (non-VCL) → clear-only, split at the u16 senc clear limit.
         let huge = u16::MAX as usize + 10;
         let sample = lp_nal(4, 6, huge); // clear = 4 + 1 + 65545 = 65550
-        let plan = plan(&sample, 4, None, None).unwrap();
+        let plan = plan(&sample, 4, &mut ParamSets::default()).unwrap();
         assert_eq!(
             plan,
             vec![
