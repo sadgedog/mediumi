@@ -1,6 +1,5 @@
 use crate::error::Error;
-use crate::subsample::CodecKind;
-use mediumi_h264::{nal::NalUnit, pps::Pps, sps::Sps};
+use crate::subsample::{CodecKind, ParamSets};
 use mediumi_mp4::{Mp4Box, find_codec_config, iter_traks};
 use std::collections::HashMap;
 
@@ -24,11 +23,9 @@ pub(crate) fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, Co
                 if cfg.len() < 5 {
                     return Err(Error::MissingAvcc);
                 }
-                let (sps, pps) = parse_avcc_sps_pps(cfg);
                 CodecKind::Avc {
                     length_size: (cfg[4] & 0b0000_0011) + 1,
-                    sps,
-                    pps,
+                    params: parse_avcc_params(cfg),
                 }
             }
             b"mp4a" | b"enca" => CodecKind::Mp4a,
@@ -39,47 +36,47 @@ pub(crate) fn build_track_table(moov_boxes: &[Mp4Box]) -> Result<HashMap<u32, Co
     Ok(tracks)
 }
 
-/// Extract and parse the first SPS and PPS from an `avcC` configuration record.
-/// Returns `(None, None)` if the record is malformed or parsing fails, so the
-/// AVC planner falls back to a fixed clear leader instead of erroring.
-fn parse_avcc_sps_pps(avcc: &[u8]) -> (Option<Box<Sps>>, Option<Box<Pps>>) {
-    fn inner(avcc: &[u8]) -> Option<(Box<Sps>, Box<Pps>)> {
-        // avcC: configVer(1) profile(1) compat(1) level(1) lengthSizeM1(1)
-        //       numSPS(1) [len(2) SPS NAL]... numPPS(1) [len(2) PPS NAL]...
-        if avcc.len() < 6 {
-            return None;
-        }
-        let num_sps = avcc[5] & 0b0001_1111;
-        let mut p = 6usize;
-        let mut sps: Option<Sps> = None;
-        for _ in 0..num_sps {
-            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
-            p += 2;
-            let nal = avcc.get(p..p + len)?;
-            p += len;
-            if sps.is_none() && nal.len() > 1 {
-                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
-                sps = Sps::parse(&rbsp).ok();
-            }
-        }
-        let sps = sps?;
-        let num_pps = *avcc.get(p)?;
-        p += 1;
-        let mut pps: Option<Pps> = None;
-        for _ in 0..num_pps {
-            let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
-            p += 2;
-            let nal = avcc.get(p..p + len)?;
-            p += len;
-            if pps.is_none() && nal.len() > 1 {
-                let rbsp = NalUnit::remove_emulation_prevention_bytes(&nal[1..]);
-                pps = Pps::parse(&rbsp, &sps).ok();
-            }
-        }
-        Some((Box::new(sps), Box::new(pps?)))
+/// Seed a [`ParamSets`] with every SPS and PPS carried in an `avcC` record.
+/// Entries that fail to parse are skipped; a malformed record just yields fewer
+/// (or no) parameter sets, and any missing set is later supplied in-band or, if
+/// never available, surfaces as a slice-header parse error at plan time.
+fn parse_avcc_params(avcc: &[u8]) -> ParamSets {
+    let mut params = ParamSets::default();
+    // avcC: configVer(1) profile(1) compat(1) level(1) lengthSizeM1(1)
+    //       numSPS(1) [len(2) SPS NAL]... numPPS(1) [len(2) PPS NAL]...
+    let Some(()) = walk_avcc(avcc, &mut params) else {
+        return params;
+    };
+    params
+}
+
+/// Walk the SPS then PPS lists of an `avcC` record, ingesting each NAL body.
+/// Returns `None` on a truncated record (partial ingest is kept).
+fn walk_avcc(avcc: &[u8], params: &mut ParamSets) -> Option<()> {
+    if avcc.len() < 6 {
+        return None;
     }
-    match inner(avcc) {
-        Some((sps, pps)) => (Some(sps), Some(pps)),
-        None => (None, None),
+    let num_sps = avcc[5] & 0b0001_1111;
+    let mut p = 6usize;
+    for _ in 0..num_sps {
+        let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
+        p += 2;
+        let nal = avcc.get(p..p + len)?;
+        p += len;
+        if nal.len() > 1 {
+            params.ingest_sps(&nal[1..]);
+        }
     }
+    let num_pps = *avcc.get(p)?;
+    p += 1;
+    for _ in 0..num_pps {
+        let len = u16::from_be_bytes([*avcc.get(p)?, *avcc.get(p + 1)?]) as usize;
+        p += 2;
+        let nal = avcc.get(p..p + len)?;
+        p += len;
+        if nal.len() > 1 {
+            params.ingest_pps(&nal[1..]);
+        }
+    }
+    Some(())
 }
