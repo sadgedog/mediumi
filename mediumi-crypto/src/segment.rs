@@ -49,11 +49,21 @@ pub(crate) fn enc_media_segment<W: Write>(
     let parts = split_media_segment(media_bytes)?;
     let new_moof = media::enc_media(enc, moov, parts.moof, parts.mdat, parts.mdat_header_size)?;
 
-    out.write_all(parts.prefix)?;
+    write_excluding_sidx(parts.prefix, out)?;
     out.write_all(&new_moof)?;
     out.write_all(&((parts.mdat.len() + 8) as u32).to_be_bytes())?;
     out.write_all(b"mdat")?;
     out.write_all(parts.mdat)?;
+    Ok(())
+}
+
+fn write_excluding_sidx<W: Write>(bytes: &[u8], out: &mut W) -> Result<(), Error> {
+    for info in BoxWalker::new(bytes) {
+        let info = info?;
+        if info.box_type != BoxType::Sidx {
+            out.write_all(&bytes[info.start_offset..info.end_offset()])?;
+        }
+    }
     Ok(())
 }
 
@@ -99,4 +109,42 @@ pub fn split_media_segment(segment: &mut [u8]) -> Result<MediaSegmentParts<'_>, 
         mdat: mdat_payload,
         mdat_header_size: mdat_hdr,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a box: 4-byte big-endian size + 4-byte type + payload.
+    fn boxed(box_type: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut v = ((8 + payload.len()) as u32).to_be_bytes().to_vec();
+        v.extend_from_slice(box_type);
+        v.extend_from_slice(payload);
+        v
+    }
+
+    #[test]
+    fn drops_sidx_and_keeps_everything_else() {
+        let styp = boxed(b"styp", &[0xAA; 4]);
+        let sidx = boxed(b"sidx", &[0xBB; 8]);
+        let free = boxed(b"free", &[0xCC; 2]);
+        let mut prefix = styp.clone();
+        prefix.extend_from_slice(&sidx);
+        prefix.extend_from_slice(&free);
+
+        let mut out = Vec::new();
+        write_excluding_sidx(&prefix, &mut out).unwrap();
+
+        let mut expected = styp;
+        expected.extend_from_slice(&free);
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn passes_through_prefix_without_sidx() {
+        let prefix = boxed(b"styp", &[0xAA; 4]);
+        let mut out = Vec::new();
+        write_excluding_sidx(&prefix, &mut out).unwrap();
+        assert_eq!(out, prefix);
+    }
 }
