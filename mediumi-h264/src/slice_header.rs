@@ -847,7 +847,7 @@ impl SliceHeader {
             && (matches!(st, SliceType::P | SliceType::SP)))
             || (pps.weighted_bipred_idc == 1 && st == SliceType::B)
         {
-            let chroma_array_type = sps.high_profile.as_ref().map_or(0, |hp| {
+            let chroma_array_type = sps.high_profile.as_ref().map_or(1, |hp| {
                 if hp.separate_colour_plane_flag == Some(true) {
                     0
                 } else {
