@@ -7,10 +7,6 @@ use mediumi_h264::sps::Sps;
 use mediumi_h264::util::bitstream::BitstreamReader;
 use std::collections::HashMap;
 
-/// A VCL NAL whose protected (post-leader) slice data is
-/// this many bytes or fewer is left completely unencrypted.
-const MIN_ENCRYPTED_BYTES: usize = 16;
-
 /// NAL unit types carrying parameter sets.
 const NAL_SPS: u8 = 7;
 const NAL_PPS: u8 = 8;
@@ -121,21 +117,18 @@ pub fn plan(
         }
 
         if is_vcl(nal_type) {
-            // clear leader = NAL header byte + slice header.
+            // clear leader = NAL header byte + slice header. Everything after
+            // the leader is recorded as the encrypted region, even when it is
+            // shorter than one cipher block.
             let sh = slice_header_len(nal_body, nal_type, nal_ref_idc, params)
                 .ok_or(Error::SliceHeaderParseFailed)?;
             let leader = 1 + sh; // NAL header byte + slice header bytes
-            if nal_len <= leader + MIN_ENCRYPTED_BYTES {
-                // protected slice data ≤ 16 bytes → leave the whole NAL clear
-                pending_clear += ls as u64 + nal_len as u64;
-            } else {
-                // [ pending clear ][ len ][ NALhdr + slice header ][ slice data ]
-                //  └──────────────── clear ──────────────────────┘└ encrypted ─┘
-                let clear = pending_clear + ls as u64 + leader as u64;
-                let encrypted = nal_len as u64 - leader as u64;
-                push_clear_split(&mut out, clear, encrypted);
-                pending_clear = 0;
-            }
+            // [ pending clear ][ len ][ NALhdr + slice header ][ slice data ]
+            //  └──────────────── clear ──────────────────────┘└ encrypted ─┘
+            let clear = pending_clear + ls as u64 + leader as u64;
+            let encrypted = nal_len as u64 - leader as u64;
+            push_clear_split(&mut out, clear, encrypted);
+            pending_clear = 0;
         } else {
             // non-VCL NAL → entire NAL (prefix + body) stays clear
             pending_clear += ls as u64 + nal_len as u64;
