@@ -68,10 +68,8 @@
 //! └───────────────────────────────────────────────────────┘
 //! ```
 
-use crate::{
-    error::Error,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
-};
+use crate::error::Error;
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug, Clone)]
 pub struct HighProfileData {

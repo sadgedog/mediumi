@@ -4,8 +4,8 @@ use crate::{
         tref::Tref, trgr::Trgr, udta::Udta,
     },
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Trak {

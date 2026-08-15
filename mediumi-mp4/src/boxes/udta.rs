@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Udta {

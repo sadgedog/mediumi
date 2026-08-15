@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, mfhd::Mfhd, traf::Traf},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Moof {

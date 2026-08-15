@@ -4,8 +4,8 @@ use crate::{
         stbl::Stbl, sthd::Sthd, vmhd::Vmhd,
     },
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Minf {

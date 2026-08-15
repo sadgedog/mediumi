@@ -1,0 +1,10 @@
+[package]
+name = "mediumi-util"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Utility library for mediumi"
+readme = "README.md"
+repository.workspace = true
+license = "MIT"

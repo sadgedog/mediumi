@@ -2,7 +2,7 @@ use crate::boxes::BaseBox;
 use crate::boxes::sinf::Sinf;
 use crate::boxes::stsd::{NestedBox, SampleEntry};
 use crate::boxes::trak::Trak;
-use crate::util::bytestream::ByteWriter;
+use mediumi_util::bytestream::ByteWriter;
 
 /// Walk `trak.mdia.minf.stbl.stsd.entries` and return the body bytes of the first
 /// nested box whose 4-byte type matches `config_fourcc`.

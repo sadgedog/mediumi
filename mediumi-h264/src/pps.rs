@@ -64,10 +64,8 @@
 //! └───────────────────────────────────────────────────────┘
 //! ```
 
-use crate::{
-    util::bitstream::{BitstreamReader, BitstreamWriter},
-    {error::Error, sps::Sps},
-};
+use crate::{error::Error, sps::Sps};
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug, Clone)]
 pub enum SliceGroup {

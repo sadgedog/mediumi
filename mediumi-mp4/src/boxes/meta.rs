@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, FullBox, FullBoxHeader, Mp4Box, error::Error, hdlr::Hdlr},
     types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 #[derive(Debug)]
 pub struct Meta {

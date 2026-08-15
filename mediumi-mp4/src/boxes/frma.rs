@@ -1,8 +1,5 @@
-use crate::{
-    BaseBox, Error,
-    types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
-};
+use crate::{BaseBox, Error, types::BoxType};
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 /// Records the codingname (box_type) of the unprotected sample entry that the
 /// enclosing `encv` / `enca` is shadowing (e.g. `b"avc1"` / `b"mp4a"`).

@@ -4,7 +4,7 @@ use mediumi_h264::nal::{NalUnit, NalUnitType};
 use mediumi_h264::pps::Pps;
 use mediumi_h264::slice_header::SliceHeader;
 use mediumi_h264::sps::Sps;
-use mediumi_h264::util::bitstream::BitstreamReader;
+use mediumi_util::bitstream::BitstreamReader;
 use std::collections::HashMap;
 
 /// NAL unit types carrying parameter sets.

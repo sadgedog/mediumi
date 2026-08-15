@@ -7,6 +7,7 @@ members = [
     "mediumi-h264",
     "mediumi-mp4",
     "mediumi-mpeg2ts",
+    "mediumi-util",
 ]
 resolver = "2"
 

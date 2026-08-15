@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, elst::Elst},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Edts {

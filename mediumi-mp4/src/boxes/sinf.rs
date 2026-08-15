@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, frma::Frma, schi::Schi, schm::Schm},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 /// Protection Scheme Information Box (`sinf`)
 /// Inserted as a nested box inside the renamed (`encv` / `enca`) sample entry.

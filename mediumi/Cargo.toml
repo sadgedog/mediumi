@@ -18,3 +18,4 @@ mediumi-crypto = { path = "../mediumi-crypto", version = "0.1.0" }
 mediumi-h264 = { path = "../mediumi-h264", version = "0.1.0" }
 mediumi-mp4 = { path = "../mediumi-mp4", version = "0.1.0" }
 mediumi-mpeg2ts = { path = "../mediumi-mpeg2ts", version = "0.1.0" }
+mediumi-util = { path = "../mediumi-util", version = "0.1.0" }

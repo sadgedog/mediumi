@@ -1,9 +1,7 @@
 //! SEI (Supplemental enhancement information)
 
-use crate::{
-    error::Error,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
-};
+use crate::error::Error;
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug)]
 pub struct SeiMessage {

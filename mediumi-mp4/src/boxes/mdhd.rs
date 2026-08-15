@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader, error::Error},
     types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 #[derive(Debug)]
 pub struct Mdhd {

@@ -49,7 +49,8 @@ pub mod slice_c;
 pub mod slice_header;
 pub mod sps;
 pub mod sps_ext;
-pub mod util;
+
+use mediumi_util::bitstream::BitstreamReader;
 
 use crate::{
     annex_b::{StartCode, parse_all},
@@ -66,7 +67,6 @@ use crate::{
     slice_c::SliceC,
     sps::Sps,
     sps_ext::SpsExt,
-    util::bitstream::BitstreamReader,
 };
 
 #[derive(Debug, Clone)]
