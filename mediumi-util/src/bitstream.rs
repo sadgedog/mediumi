@@ -2,7 +2,7 @@
 //!
 //! Provides bit-granularity read/write operations and Exp-Golomb coding (ue(v), se(v))
 
-use crate::util::error::Error;
+use crate::error::Error;
 
 pub struct BitstreamReader<'a> {
     data: &'a [u8],
@@ -175,7 +175,7 @@ impl BitstreamWriter {
     /// Write an unsigned Exp-Golomb coded value: ue(v)
     pub fn write_ue(&mut self, value: u32) {
         let code = value + 1;
-        let bits = 32 - code.leading_zeros(); // bit length of code 
+        let bits = 32 - code.leading_zeros(); // bit length of code
         let leading_zeros = bits - 1;
 
         // add 0 (number of leading_zeros)
@@ -312,9 +312,9 @@ mod tests {
     #[test]
     fn test_write_ue() {
         let mut writer = BitstreamWriter::new();
-        writer.write_ue(0); // 1                                                                         
-        writer.write_ue(1); // 010                                                                       
-        writer.write_ue(2); // 011                                                                       
+        writer.write_ue(0); // 1
+        writer.write_ue(1); // 010
+        writer.write_ue(2); // 011
         writer.write_ue(3); // 00100
         let bytes = writer.finish();
         // 1010_0110 0100_0000

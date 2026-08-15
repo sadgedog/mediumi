@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, elng::Elng, hdlr::Hdlr, mdhd::Mdhd, minf::Minf},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Mdia {

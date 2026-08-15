@@ -5,8 +5,8 @@ use crate::{
     nal::NalUnitType,
     pps::{Pps, SliceGroup},
     sps::{self, Sps},
-    util::bitstream::{BitstreamReader, BitstreamWriter},
 };
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug)]
 pub struct FieldFlags {

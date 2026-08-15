@@ -75,8 +75,8 @@ use crate::{
         tref::Tref, trex::Trex, trgr::Trgr, trun::Trun, udta::Udta, vmhd::Vmhd,
     },
     types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 pub trait BaseBox: Sized {
     const BOX_TYPE: BoxType;

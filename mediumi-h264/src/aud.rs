@@ -1,4 +1,6 @@
-use crate::{error::Error, util::bitstream::BitstreamReader};
+use mediumi_util::bitstream::BitstreamReader;
+
+use crate::error::Error;
 
 #[derive(Debug, PartialEq)]
 pub enum PrimaryPicType {

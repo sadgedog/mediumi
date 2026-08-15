@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, Error},
     types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 #[derive(Debug, PartialEq)]
 pub struct Brand([u8; 4]);

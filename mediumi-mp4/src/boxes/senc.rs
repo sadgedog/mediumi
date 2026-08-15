@@ -1,9 +1,5 @@
-use crate::{
-    BaseBox, Error, FullBox,
-    boxes::FullBoxHeader,
-    types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
-};
+use crate::{BaseBox, Error, FullBox, boxes::FullBoxHeader, types::BoxType};
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 /// `senc` flag: each entry carries explicit subsample information.
 pub const SENC_FLAG_USE_SUBSAMPLES: u32 = 0x000002;

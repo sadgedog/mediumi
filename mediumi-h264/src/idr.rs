@@ -1,11 +1,5 @@
-use crate::{
-    error::Error,
-    nal::NalUnitType,
-    pps::Pps,
-    slice_header::SliceHeader,
-    sps::Sps,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
-};
+use crate::{error::Error, nal::NalUnitType, pps::Pps, slice_header::SliceHeader, sps::Sps};
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug)]
 pub struct Idr {

@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, FullBox, FullBoxHeader},
     types::{self, BoxType},
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 pub const UNITY_MATRIX: [u32; 9] = [0x0001_0000, 0, 0, 0, 0x0001_0000, 0, 0, 0, 0x4000_0000];
 

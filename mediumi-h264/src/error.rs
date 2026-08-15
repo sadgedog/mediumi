@@ -71,10 +71,10 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<crate::util::error::Error> for Error {
-    fn from(e: crate::util::error::Error) -> Self {
+impl From<mediumi_util::error::Error> for Error {
+    fn from(e: mediumi_util::error::Error) -> Self {
         match e {
-            crate::util::error::Error::DataTooShort(_, _) => Error::DataTooShort,
+            mediumi_util::error::Error::DataTooShort(_, _) => Error::DataTooShort,
         }
     }
 }

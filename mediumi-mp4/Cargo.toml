@@ -10,3 +10,6 @@ repository.workspace = true
 license = "MIT"
 keywords = ["multimedia", "container", "video", "audio"]
 categories = ["multimedia", "multimedia::video", "multimedia::audio"]
+
+[dependencies]
+mediumi-util = { path = "../mediumi-util", version = "0.1.0" }

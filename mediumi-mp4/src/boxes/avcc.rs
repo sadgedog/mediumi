@@ -1,9 +1,7 @@
 //! AVCDecoderConfigurationRecord (avcC) parser / serializer.
 
-use crate::{
-    boxes::error::Error,
-    util::bytestream::{ByteReader, ByteWriter},
-};
+use crate::boxes::error::Error;
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 #[derive(Debug, Clone)]
 pub struct AvccConfig {

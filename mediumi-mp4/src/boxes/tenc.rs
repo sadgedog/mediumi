@@ -1,9 +1,5 @@
-use crate::{
-    BaseBox, Error, FullBox,
-    boxes::FullBoxHeader,
-    types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
-};
+use crate::{BaseBox, Error, FullBox, boxes::FullBoxHeader, types::BoxType};
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 /// Track Encryption Box (`tenc`)
 /// Default per-track encryption parameters. Version 0 is used by the `cenc`

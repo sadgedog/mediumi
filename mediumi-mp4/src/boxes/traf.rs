@@ -4,8 +4,8 @@ use crate::{
         senc::Senc, sgpd::Sgpd, subs::Subs, tfdt::Tfdt, tfhd::Tfhd, trun::Trun,
     },
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Traf {

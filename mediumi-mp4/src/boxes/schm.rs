@@ -1,9 +1,5 @@
-use crate::{
-    BaseBox, Error, FullBox,
-    boxes::FullBoxHeader,
-    types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
-};
+use crate::{BaseBox, Error, FullBox, boxes::FullBoxHeader, types::BoxType};
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 /// Scheme Type Box (`schm`)
 /// Identifies the protection scheme (e.g. `cenc` / `cbcs`) and its version.

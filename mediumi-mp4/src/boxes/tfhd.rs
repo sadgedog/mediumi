@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, Error, FullBox, FullBoxHeader},
     types::BoxType,
-    util::bytestream::{ByteReader, ByteWriter},
 };
+use mediumi_util::bytestream::{ByteReader, ByteWriter};
 
 const BASE_DATA_OFFSET_PRESENT: u32 = 0x000001;
 const SAMPLE_DESCRIPTION_INDEX_PRESENT: u32 = 0x000002;

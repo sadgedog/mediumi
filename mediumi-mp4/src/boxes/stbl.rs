@@ -6,8 +6,8 @@ use crate::{
         subs::Subs,
     },
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 #[derive(Debug)]
 pub struct Stbl {

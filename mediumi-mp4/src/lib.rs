@@ -18,7 +18,6 @@ pub mod boxes;
 pub mod sample;
 pub mod sample_entry;
 pub mod types;
-pub mod util;
 pub mod walk;
 
 pub use boxes::avcc::{AvccConfig, Extension as AvccExtension};

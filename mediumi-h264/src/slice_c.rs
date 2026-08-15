@@ -1,11 +1,7 @@
 //! slice_c (Slice Data Partition C Layer)
 
-use crate::{
-    error::Error,
-    pps::Pps,
-    sps::Sps,
-    util::bitstream::{BitstreamReader, BitstreamWriter},
-};
+use crate::{error::Error, pps::Pps, sps::Sps};
+use mediumi_util::bitstream::{BitstreamReader, BitstreamWriter};
 
 #[derive(Debug)]
 pub struct SliceC {

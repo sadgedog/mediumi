@@ -1,8 +1,8 @@
 use crate::{
     boxes::{BaseBox, BoxIter, Error, Mp4Box, tenc::Tenc},
     types::BoxType,
-    util::bytestream::ByteWriter,
 };
+use mediumi_util::bytestream::ByteWriter;
 
 /// Scheme Information Box (`schi`)
 /// Container for scheme-specific information.

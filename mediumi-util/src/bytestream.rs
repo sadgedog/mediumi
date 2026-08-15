@@ -1,6 +1,6 @@
 //! Byte-oriented reader and writer for mp4 box (de)serialization.
 
-use crate::util::error::Error;
+use crate::error::Error;
 
 pub struct ByteReader<'a> {
     data: &'a [u8],

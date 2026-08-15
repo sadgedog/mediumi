@@ -14,6 +14,7 @@ categories = ["multimedia", "cryptography"]
 [dependencies]
 mediumi-mp4 = { path = "../mediumi-mp4" }
 mediumi-h264 = { path = "../mediumi-h264" }
+mediumi-util = { path = "../mediumi-util" }
 aes = "0.9"
 ctr = "0.10"
 cbc = "0.2"
