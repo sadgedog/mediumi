@@ -1,33 +1,39 @@
 # mediumi: A Media Toolkit
 
 ## About this
+
 mediumi is a media toolkit written from scratch in Rust.
 It provides the following features.
 
 ### Features
+
 - Media container demuxer and muxer for the following containers
-    - MP4 / Fragmented MP4
-    - MPEG2-TS
+  - MP4 / Fragmented MP4
+  - MPEG2-TS
 - Parser and Serializers and for the following codecs
-    - AAC (ADTS)
-    - AC-3 (A/52)
-    - H.264 (AVC)
+  - AAC (ADTS)
+  - AC-3 (A/52)
+  - H.264 (AVC)
 - Encrypter
-    - Common Encryption (CENC) for fmp4/cmaf: `cenc` (AES-128-CTR) and `cbcs` (AES-128-CBC, 1:9 pattern)
+  - Common Encryption (CENC) for fmp4/cmaf: `cenc` (AES-128-CTR) and `cbcs` (AES-128-CBC, 1:9 pattern)
 
 ## Crates
+
 - mediumi-aac
-    - AAC (ADTS) bitstream parser and serializer
+  - AAC (ADTS) bitstream parser and serializer
 - mediumi-ac3
-    - AC-3 (A/52) bitstream parser and serializer
+  - AC-3 (A/52) bitstream parser and serializer
 - mediumi-crypto
-    - Common Encryption (CENC) encrypter for fmp4/cmaf (H.264 video, AAC audio); `cenc` and `cbcs` schemes
+  - Common Encryption (CENC) encrypter for fmp4/cmaf (H.264 video, AAC audio); `cenc` and `cbcs` schemes
 - mediumi-h264
-    - H.264 (AVC) bitstream parser and serializer
+  - H.264 (AVC) bitstream parser and serializer
 - mediumi-mpeg2ts
-    - MPEG2-TS container demuxer and muxer
+  - MPEG2-TS container demuxer and muxer
+- mediumi-util
+  - Utilities for mediumi
 
 ## Build
+
 ```sh
 $ make build-all     # Build all crates
 $ make build-aac     # Build specific crate
@@ -35,9 +41,11 @@ $ make build-ac3
 $ make build-h264
 $ make build-mp4
 $ make build-mpeg2ts
+$ make build-util
 ```
 
 ## Test
+
 ```sh
 $ make test-all     # Test all crates
 $ make test-aac     # Test specific crate
@@ -45,26 +53,30 @@ $ make test-ac3
 $ make test-h264
 $ make test-mp4
 $ make test-mpeg2ts
+$ make test-util
 ```
 
 ## Specification
+
 - AAC (ADTS)
-    - ISO/IEC 14496-3
+  - ISO/IEC 14496-3
 - AC-3 (A/52)
-    - ATSC A/52
+  - ATSC A/52
 - H.264
-    - ISO/IEC 14496-10
+  - ISO/IEC 14496-10
 - MP4
-    - ISO/IEC 14496-12
-    - ISO/IEC 14496-15 
+  - ISO/IEC 14496-12
+  - ISO/IEC 14496-15
 - MPEG2-TS
-    - ISO/IEC 13818-1
+  - ISO/IEC 13818-1
 - CENC (Common Encryption)
-    - ISO/IEC 23001-7
+  - ISO/IEC 23001-7
 
 ## Status
+
 This project is under active development. APIs may change without notice.
 
 ## Contributing
+
 Contributions are welcome. \
 If you find a bug, have a feature request, or want to improve the implementation, please open an [issue](https://github.com/sadgedog/mediumi/issues) or submit a [pull request](https://github.com/sadgedog/mediumi/pulls).
