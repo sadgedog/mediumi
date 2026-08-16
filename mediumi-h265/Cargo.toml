@@ -1,0 +1,15 @@
+[package]
+name = "mediumi-h265"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "H.265 codec parser and serializer"
+readme = "README.md"
+repository.workspace = true
+license = "MIT"
+keywords = ["codec", "video"]
+categories = ["multimedia", "multimedia::video"]
+
+[dependencies]
+mediumi-util = { path = "../mediumi-util", version = "0.1.0" }
