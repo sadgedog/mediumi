@@ -2,6 +2,8 @@
 pub enum Error {
     DataTooShort,
     InvalidForbiddenZeroBit,
+    InvalidPicType(u8),
+    InvalidTrailingBits,
 }
 
 impl std::fmt::Display for Error {
@@ -9,6 +11,8 @@ impl std::fmt::Display for Error {
         match self {
             Error::DataTooShort => write!(f, "Data too short"),
             Error::InvalidForbiddenZeroBit => write!(f, "Invalid forbidden_zero_bit value"),
+            Error::InvalidPicType(value) => write!(f, "Invalid picture type: {}", value),
+            Error::InvalidTrailingBits => write!(f, "Invalid trailing bits"),
         }
     }
 }
