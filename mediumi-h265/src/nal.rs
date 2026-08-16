@@ -232,6 +232,53 @@ impl NalUnit {
     }
 }
 
+/// Remove emulation prevention bytes (0x03) from RBSP to obtain the raw bitstream (SODB)
+/// e.g. [0x00, 0x00, 0x03, 0x01] -> [0x00, 0x00, 0x01]
+pub fn remove_emulation_prevention_bytes(data: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(data.len());
+    let mut i = 0;
+
+    while i < data.len() {
+        if i + 2 < data.len()
+            && data[i] == 0x00
+            && data[i + 1] == 0x00
+            && data[i + 2] == 0x03
+            && i + 3 < data.len()
+            && data[i + 3] <= 0x03
+        {
+            buf.push(data[i]);
+            buf.push(data[i + 1]);
+            i += 3; // skip 0x03
+        } else {
+            buf.push(data[i]);
+            i += 1;
+        }
+    }
+    buf
+}
+
+/// Insert emulation prevention bytes: any 0x00 0x00 followed by 0x00..=0x03
+/// gets a 0x03 inserted so the payload never contains a start-code prefix.
+/// e.g. [0x00, 0x00, 0x01] -> [0x00, 0x00, 0x03, 0x01]
+pub fn insert_emulation_prevention_bytes(data: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(data.len());
+    let mut zeros = 0usize;
+
+    for &b in data {
+        if zeros >= 2 && b <= 0x03 {
+            buf.push(0x03);
+            zeros = 0;
+        }
+        buf.push(b);
+        if b == 0x00 {
+            zeros += 1;
+        } else {
+            zeros = 0;
+        }
+    }
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,5 +302,18 @@ mod tests {
             header.nuh_temporal_id_plus1,
             parsed_header.nuh_temporal_id_plus1
         );
+    }
+
+    #[test]
+    fn test_emulation_prevention_roundtrip() {
+        let sodb = vec![0x00, 0x00, 0x01, 0xaa, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff];
+        let with_epb = insert_emulation_prevention_bytes(&sodb);
+        assert!(
+            !with_epb
+                .windows(3)
+                .any(|w| w[0] == 0 && w[1] == 0 && w[2] <= 1)
+        );
+        let restored = remove_emulation_prevention_bytes(&with_epb);
+        assert_eq!(sodb, restored);
     }
 }

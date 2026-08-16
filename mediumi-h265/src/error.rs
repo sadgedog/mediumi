@@ -4,6 +4,7 @@ pub enum Error {
     InvalidForbiddenZeroBit,
     InvalidPicType(u8),
     InvalidTrailingBits,
+    InvalidStartCode(u32),
 }
 
 impl std::fmt::Display for Error {
@@ -13,6 +14,7 @@ impl std::fmt::Display for Error {
             Error::InvalidForbiddenZeroBit => write!(f, "Invalid forbidden_zero_bit value"),
             Error::InvalidPicType(value) => write!(f, "Invalid picture type: {}", value),
             Error::InvalidTrailingBits => write!(f, "Invalid trailing bits"),
+            Error::InvalidStartCode(value) => write!(f, "Invalid start code: {value:#010x}"),
         }
     }
 }
